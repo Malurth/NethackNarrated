@@ -1,0 +1,47 @@
+{
+  "name": "nethacknarrated",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "test": "vitest run && svelte-check --tsconfig ./tsconfig.app.json",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.12.0",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.0.1",
+    "svelte": "^5.53.12",
+    "svelte-check": "^4.4.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1",
+    "vitest": "^4.1.1"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
+    "@ai-sdk/deepseek": "^2.0.27",
+    "@ai-sdk/google": "^3.0.58",
+    "@ai-sdk/groq": "^3.0.33",
+    "@ai-sdk/openai": "^3.0.50",
+    "@ai-sdk/xai": "^3.0.77",
+    "@neth4ck/api": "file:../neth4ck-monorepo/packages/api",
+    "@neth4ck/neth4ck": "file:../neth4ck-monorepo/packages/neth4ck",
+    "@neth4ck/wasm-367": "file:../neth4ck-monorepo/packages/wasm-367",
+    "@neth4ck/wasm-37": "file:../neth4ck-monorepo/packages/wasm-37",
+    "ai": "^6.0.146",
+    "ollama-ai-provider-v2": "^3.5.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@neth4ck/neth4ck": "file:../neth4ck-monorepo/packages/neth4ck"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../nethack-3d"
+		},
+		{
+			"path": "../neth4ck-monorepo"
+		},
+		{
+			"path": "../neth4ck-monorepo/packages/wasm-367/NetHack"
+		},
+		{
+			"path": "../neth4ck-monorepo/packages/wasm-37/NetHack"
+		}
+	],
+	"settings": {
+		"dotrush.roslyn.projectOrSolutionFiles": [
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-367\\NetHack\\win\\win32\\vs2017\\NetHack.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\packages\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln",
+			"c:\\Users\\malur\\neth4ck-monorepo\\node_modules\\@neth4ck\\api\\node_modules\\@neth4ck\\.ignored_neth4ck\\node_modules\\@neth4ck\\wasm-37\\NetHack\\sys\\windows\\vs\\sfctool.sln"
+		]
+	}
+}

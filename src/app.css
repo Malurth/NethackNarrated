@@ -1,0 +1,152 @@
+:root {
+  /* Dark theme — matching Claude plays palette */
+  --bg-primary: #060a0f;
+  --bg-secondary: #0a1520;
+  --bg-panel: #030608;
+  --bg-highlight: rgba(0, 255, 136, 0.06);
+  --border: #1a2a38;
+  --text: #c8d8e8;
+  --text-bright: #c8d8e8;
+  --text-dim: #445566;
+
+  /* Accent — bright green like Claude plays title */
+  --accent: #00ff88;
+
+  /* Game messages — muted blue-gray */
+  --game-msg: #88aabb;
+
+  /* Narration — slightly dimmer blue-gray */
+  --msg-color: #7799aa;
+
+  /* Stat bars */
+  --hp-bar: #44ff88;
+  --hp-bar-warn: #ffcc44;
+  --hp-bar-danger: #ff4444;
+  --pw-bar: #88aaff;
+
+  /* BUC colors */
+  --buc-blessed: #77ccee;
+  --buc-cursed: #ff5544;
+  --buc-uncursed: #667788;
+
+  /* Gold */
+  --gold: #ffdd44;
+
+  /* Layout spacing — single value for all inter-panel gaps */
+  --gap: 10px;
+  --panel-radius: 6px;
+
+  /* Fonts — monospace throughout for the game aesthetic */
+  --font-mono: 'Courier New', 'Consolas', 'Monaco', monospace;
+  --font-ui: 'Courier New', 'Consolas', 'Monaco', monospace;
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* Disable text selection while resizing layout panels */
+body.resizing {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.resizing iframe {
+  pointer-events: none;
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-dim);
+  font-size: 15px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-panel);
+  border-color: var(--text-dim);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: #33ff99;
+  border-color: #33ff99;
+}
+
+.btn-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-accent:hover {
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.btn-small {
+  padding: 5px 14px;
+  font-size: 13px;
+}
+
+.btn-large {
+  padding: 14px 32px;
+  font-size: 18px;
+}
