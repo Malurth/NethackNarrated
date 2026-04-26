@@ -1,0 +1,73 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # file: dependencies in package.json resolve to ../neth4ck-monorepo
+      - uses: actions/checkout@v4
+        with:
+          repository: Malurth/neth4ck-monorepo
+          ref: feat/api-layer
+          path: neth4ck-monorepo
+
+      # Move checkout to where file: links expect it (one level above project root)
+      - name: Place monorepo at expected path
+        run: mv neth4ck-monorepo "$GITHUB_WORKSPACE/../neth4ck-monorepo"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install monorepo workspace links
+        working-directory: ../neth4ck-monorepo
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      # WASM build artifacts are gitignored in the monorepo but tracked
+      # in this repo's public/. Copy them so imports resolve.
+      - name: Populate WASM build artifacts
+        run: |
+          mkdir -p ../neth4ck-monorepo/packages/wasm-367/build
+          cp public/nethack-367.js ../neth4ck-monorepo/packages/wasm-367/build/nethack.js
+          cp public/nethack-367.wasm ../neth4ck-monorepo/packages/wasm-367/build/nethack.wasm
+          mkdir -p ../neth4ck-monorepo/packages/wasm-37/build
+          cp public/nethack-37.js ../neth4ck-monorepo/packages/wasm-37/build/nethack.js
+          cp public/nethack-37.wasm ../neth4ck-monorepo/packages/wasm-37/build/nethack.wasm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npx vite build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

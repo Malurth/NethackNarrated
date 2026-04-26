@@ -16,6 +16,7 @@ function copyWasmPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/NethackNarrated/',
   plugins: [svelte(), svelteTesting(), copyWasmPlugin()],
   optimizeDeps: {
     exclude: ['@neth4ck/api', '@neth4ck/neth4ck', '@neth4ck/wasm-367', '@neth4ck/wasm-37'],
