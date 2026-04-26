@@ -940,7 +940,7 @@ describe('narrate — turn log', () => {
 
   beforeEach(() => {
     llmState.provider = 'none';
-    llmState.setPreset('verbose');
+    llmState.setPreset('standard');
     llmState.entries = [];
     llmState.isGenerating = false;
     llmState.currentNarration = '';
@@ -1595,7 +1595,7 @@ describe('narration entry header population', () => {
 
   beforeEach(() => {
     llmState.provider = 'none';
-    llmState.setPreset('verbose');
+    llmState.setPreset('standard');
     llmState.entries = [];
     llmState.isGenerating = false;
     llmState.currentNarration = '';
@@ -1831,7 +1831,7 @@ describe('maybeNarrate — serialization queue', () => {
 
   beforeEach(() => {
     llmState.provider = 'none'; // synchronous "[debug: LLM call skipped]"
-    llmState.setPreset('verbose');
+    llmState.setPreset('standard');
     llmState.entries = [];
     llmState.isGenerating = false;
     llmState.currentNarration = '';

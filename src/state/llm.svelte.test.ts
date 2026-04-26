@@ -88,9 +88,9 @@ describe('LLMStore.isNarrationEnabled', () => {
 
 describe('LLMStore.setPreset', () => {
   it('sets triggers to match the preset', () => {
-    llmState.setPreset('verbose');
-    expect(llmState.triggerConfig.triggers).toEqual(PRESETS.verbose);
-    expect(llmState.triggerConfig.activePreset).toBe('verbose');
+    llmState.setPreset('standard');
+    expect(llmState.triggerConfig.triggers).toEqual(PRESETS.standard);
+    expect(llmState.triggerConfig.activePreset).toBe('standard');
   });
 
   it('sets off preset', () => {
@@ -104,28 +104,28 @@ describe('LLMStore.toggleTrigger', () => {
   it('toggles a trigger and detects custom preset', () => {
     llmState.setPreset('standard');
     llmState.toggleTrigger('monsterAppeared');
-    expect(llmState.triggerConfig.triggers.monsterAppeared).toBe(true);
+    expect(llmState.triggerConfig.triggers.monsterAppeared).toBe(false);
     expect(llmState.triggerConfig.activePreset).toBe('custom');
   });
 
   it('auto-detects preset when toggles match a known preset', () => {
     llmState.setPreset('standard');
-    // Toggle monsterAppeared on (now custom)
+    // Toggle monsterAppeared off (now custom)
     llmState.toggleTrigger('monsterAppeared');
     expect(llmState.triggerConfig.activePreset).toBe('custom');
-    // Toggle it back off (now matches standard again)
+    // Toggle it back on (now matches standard again)
     llmState.toggleTrigger('monsterAppeared');
     expect(llmState.triggerConfig.activePreset).toBe('standard');
   });
 
   it('auto-detects a DIFFERENT preset when toggles match it', () => {
     llmState.setPreset('standard');
-    // Standard has monsterAppeared/visionExpansion/inventoryChange OFF.
-    // Toggle all three ON → should match verbose.
+    // Standard has all triggers ON. Toggle some OFF to reach minimal.
+    llmState.toggleTrigger('statusCondition');
     llmState.toggleTrigger('monsterAppeared');
     llmState.toggleTrigger('visionExpansion');
     llmState.toggleTrigger('inventoryChange');
-    expect(llmState.triggerConfig.activePreset).toBe('verbose');
+    expect(llmState.triggerConfig.activePreset).toBe('minimal');
   });
 
   it('preserves ignoredMessagePatterns when toggling', () => {
@@ -174,7 +174,7 @@ describe('LLMStore.saveSettings', () => {
     llmState.narratorModel = 'gpt-4o-mini';
     llmState.analysisModel = 'gpt-4o';
     llmState.apiKeys = { openai: 'sk-oai-123' };
-    llmState.setPreset('verbose');
+    llmState.setPreset('standard');
 
     llmState.saveSettings();
 
@@ -183,8 +183,8 @@ describe('LLMStore.saveSettings', () => {
     expect(localStorage.getItem('llm_analysis_model')).toBe('gpt-4o');
     expect(JSON.parse(localStorage.getItem('llm_api_keys')!)).toEqual({ openai: 'sk-oai-123' });
     const saved = JSON.parse(localStorage.getItem('narration_triggers')!);
-    expect(saved.activePreset).toBe('verbose');
-    expect(saved.triggers).toEqual(PRESETS.verbose);
+    expect(saved.activePreset).toBe('standard');
+    expect(saved.triggers).toEqual(PRESETS.standard);
   });
 
   it('removes old narration_mode key', () => {

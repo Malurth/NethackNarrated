@@ -68,7 +68,7 @@ function makeSnapshot(overrides: Partial<TriggerSnapshot> = {}): TriggerSnapshot
 }
 
 function allOnConfig(): NarrationTriggerConfig {
-  return { triggers: { ...PRESETS.verbose }, activePreset: 'verbose', ignoredMessagePatterns: [] };
+  return { triggers: { ...PRESETS.standard }, activePreset: 'standard', ignoredMessagePatterns: [] };
 }
 
 beforeEach(() => {

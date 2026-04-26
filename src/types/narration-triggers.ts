@@ -28,16 +28,15 @@ export const TRIGGER_LABELS: Record<NarrationTrigger, string> = {
   inventoryChange: 'Inventory Changes',
 };
 
-export type PresetName = 'verbose' | 'standard' | 'minimal' | 'off';
+export type PresetName = 'standard' | 'minimal' | 'off';
 
 export const PRESET_LABELS: Record<PresetName, string> = {
-  verbose: 'Verbose',
   standard: 'Standard',
   minimal: 'Minimal',
   off: 'Off',
 };
 
-export const ALL_PRESETS: PresetName[] = ['verbose', 'standard', 'minimal', 'off'];
+export const ALL_PRESETS: PresetName[] = ['standard', 'minimal', 'off'];
 
 export type TriggerSet = Record<NarrationTrigger, boolean>;
 
@@ -56,16 +55,7 @@ function allOff(): TriggerSet {
 }
 
 export const PRESETS: Record<PresetName, TriggerSet> = {
-  verbose: allOn(),
-  standard: {
-    gameMessages: true,
-    levelChange: true,
-    hpLoss: true,
-    statusCondition: true,
-    monsterAppeared: false,
-    visionExpansion: false,
-    inventoryChange: false,
-  },
+  standard: allOn(),
   minimal: {
     gameMessages: true,
     levelChange: true,
