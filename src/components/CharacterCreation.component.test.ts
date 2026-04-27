@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { render, screen } from '@testing-library/svelte';
 import CharacterCreation from './CharacterCreation.svelte';
 import { saveSlotRegistry, getSlotSaveDir } from '../utils/save-detection';
+import { llmState } from '../state/llm.svelte';
 import type { SaveSlot } from '../types/game';
 
 /** Create a fake IDBFS database so validateSlots doesn't filter the slot out. */
@@ -115,5 +116,46 @@ describe('CharacterCreation component', () => {
     // Confirmation dialog should appear
     expect(await screen.findByText('Delete Save?')).toBeInTheDocument();
     expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('shows LLM warning when clicking Begin Adventure without API key', async () => {
+    // Ensure LLM is not configured (non-ollama provider, no key)
+    llmState.provider = 'anthropic';
+    llmState.apiKey = '';
+
+    render(CharacterCreation, { props: { onstart: () => {} } });
+
+    await screen.findByText('New Game');
+    screen.getByText('Begin Adventure').click();
+
+    expect(await screen.findByText('No LLM Configured')).toBeInTheDocument();
+    expect(screen.getByText('Start Anyway')).toBeInTheDocument();
+    expect(screen.getByText('Open Settings')).toBeInTheDocument();
+  });
+
+  it('does not show LLM warning when API key is set', async () => {
+    llmState.provider = 'anthropic';
+    llmState.apiKey = 'sk-test-key';
+
+    render(CharacterCreation, { props: { onstart: () => {} } });
+
+    await screen.findByText('New Game');
+    screen.getByText('Begin Adventure').click();
+
+    // The warning should NOT appear — the game should start directly
+    // (startGame calls connection.reset which will fail in test, but the warning modal shouldn't show)
+    expect(screen.queryByText('No LLM Configured')).not.toBeInTheDocument();
+  });
+
+  it('does not show LLM warning for ollama provider without key', async () => {
+    llmState.provider = 'ollama';
+    llmState.apiKey = '';
+
+    render(CharacterCreation, { props: { onstart: () => {} } });
+
+    await screen.findByText('New Game');
+    screen.getByText('Begin Adventure').click();
+
+    expect(screen.queryByText('No LLM Configured')).not.toBeInTheDocument();
   });
 });

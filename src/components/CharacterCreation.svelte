@@ -64,6 +64,41 @@
   // Delete confirmation
   let confirmingDelete = $state<SaveSlot | null>(null);
 
+  // LLM-not-configured warning
+  let showLLMWarning = $state(false);
+  let pendingAction = $state<(() => void) | null>(null);
+
+  function isLLMReady(): boolean {
+    if (llmState.provider === 'none') return false;
+    if (llmState.provider === 'ollama') return true;
+    return llmState.apiKey.length > 0;
+  }
+
+  function guardLLM(action: () => void) {
+    if (isLLMReady()) {
+      action();
+    } else {
+      pendingAction = action;
+      showLLMWarning = true;
+    }
+  }
+
+  function dismissLLMWarning() {
+    showLLMWarning = false;
+    pendingAction = null;
+  }
+
+  function proceedWithoutLLM() {
+    showLLMWarning = false;
+    pendingAction?.();
+    pendingAction = null;
+  }
+
+  function openSettingsFromWarning() {
+    showLLMWarning = false;
+    uiState.settingsOpen = true;
+  }
+
   // ── Actions ──
   async function continueSlot(slot: SaveSlot) {
     gameState.reset();
@@ -271,7 +306,7 @@
           Skip tutorial
         </label>
 
-        <button class="btn btn-primary btn-large" onclick={startGame}>
+        <button class="btn btn-primary btn-large" onclick={() => guardLLM(startGame)}>
           Begin Adventure
         </button>
       </div>
@@ -289,6 +324,22 @@
         <div class="confirm-actions">
           <button class="btn btn-small" onclick={cancelDelete}>Cancel</button>
           <button class="btn btn-danger btn-small" onclick={confirmDelete}>Delete</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showLLMWarning}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_interactive_supports_focus, a11y_no_noninteractive_element_interactions -->
+    <div class="confirm-overlay" onclick={dismissLLMWarning}>
+      <div class="confirm-card warn-card" onclick={(e) => e.stopPropagation()}>
+        <h3 class="confirm-title warn-title">No LLM Configured</h3>
+        <p class="confirm-text">
+          This game is built around AI narration. Without an LLM provider and API key set up, you won't get any narration or analysis.
+        </p>
+        <div class="confirm-actions">
+          <button class="btn btn-small" onclick={proceedWithoutLLM}>Start Anyway</button>
+          <button class="btn btn-primary btn-small" onclick={openSettingsFromWarning}>Open Settings</button>
         </div>
       </div>
     </div>
@@ -602,6 +653,14 @@
     font-weight: 700;
     color: #ff4444;
     margin: 0 0 8px;
+  }
+
+  .warn-card {
+    border-color: var(--accent);
+  }
+
+  .warn-title {
+    color: var(--accent);
   }
 
   .confirm-text {
