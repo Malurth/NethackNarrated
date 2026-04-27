@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, screen } from '@testing-library/svelte';
 import CharacterCreation from './CharacterCreation.svelte';
+
+vi.mock('../services/wasm-connection', () => ({
+  connection: { reset: vi.fn() },
+}));
 import { saveSlotRegistry, getSlotSaveDir } from '../utils/save-detection';
 import { llmState } from '../state/llm.svelte';
 import type { SaveSlot } from '../types/game';

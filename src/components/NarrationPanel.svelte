@@ -215,7 +215,7 @@
 
   .cursor {
     animation: blink 0.8s step-end infinite;
-    color: var(--accent);
+    color: currentColor;
   }
 
   @keyframes blink {
