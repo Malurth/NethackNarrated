@@ -5,6 +5,8 @@ class UIStore {
   keyboardEnabled = $state(true);
   /** Auto-dismiss display-only menus (PICK_NONE) as non-blocking messages */
   autoResolvePickNone = $state(true);
+  /** Legend entry key currently hovered (char-name), or null */
+  hoveredLegendKey = $state<string | null>(null);
 
   constructor() {
     // Restore persisted game settings

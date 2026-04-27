@@ -1,5 +1,6 @@
 <script lang="ts">
   import { gameState } from '../state/game.svelte';
+  import { uiState } from '../state/ui.svelte';
   import { NLE_COLORS } from '../utils/colors';
   import type { ItemEntity } from '../types/game';
 
@@ -11,6 +12,7 @@
     pet: boolean;
     hasGivenName: boolean;
     remembered: boolean;
+    key: string;
   }
 
   let legendEntries = $derived.by(() => {
@@ -25,12 +27,13 @@
 
       const name = e.type === 'monster' ? e.name : (e as any).category ?? 'item';
       const remembered = e.type === 'item' && !!(e as ItemEntity).remembered;
-      const key = `${e.char}-${name}${remembered ? '-rem' : ''}`;
-      const existing = map.get(key);
+      const key = `${e.char}-${name}`;
+      const mapKey = `${key}${remembered ? '-rem' : ''}`;
+      const existing = map.get(mapKey);
       if (existing) {
         existing.count++;
       } else {
-        map.set(key, {
+        map.set(mapKey, {
           char: e.char,
           name,
           color: NLE_COLORS[e.color] ?? '#aaaaaa',
@@ -38,6 +41,7 @@
           pet: e.type === 'monster' && e.pet,
           hasGivenName: e.type === 'monster' && !!(e as any).givenName,
           remembered,
+          key,
         });
       }
     }
@@ -74,6 +78,7 @@
             pet: false,
             hasGivenName: false,
             remembered: false,
+            key,
           });
         }
       }
@@ -81,20 +86,36 @@
 
     return Array.from(map.values());
   });
+
+  function tooltipFor(entry: LegendEntry): string {
+    const parts = [entry.name];
+    if (entry.pet) parts.push('(pet)');
+    if (entry.remembered) parts.push('(remembered)');
+    if (entry.count > 1) parts.push(`— ${entry.count} on this level`);
+    return parts.join(' ');
+  }
 </script>
 
 <div class="entity-legend">
   <div class="panel-header">On This Level</div>
-  <div class="legend-hint">hover a symbol</div>
+  <div class="legend-hint">hover to highlight on map</div>
   <div class="entries-inline">
     {#if gameState.player}
-      <span class="entry-inline">
+      <span class="entry-inline" title="You — the hero">
         <span class="entry-char" style="color: #00ff88; text-shadow: 0 0 7px #00ff8888">@</span>
         <span class="entry-label">You</span>
       </span>
     {/if}
     {#each legendEntries as entry}
-      <span class="entry-inline" class:remembered={entry.remembered}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <span
+        class="entry-inline"
+        class:remembered={entry.remembered}
+        class:hovered={uiState.hoveredLegendKey === entry.key}
+        title={tooltipFor(entry)}
+        onmouseenter={() => uiState.hoveredLegendKey = entry.key}
+        onmouseleave={() => { if (uiState.hoveredLegendKey === entry.key) uiState.hoveredLegendKey = null; }}
+      >
         <span class="entry-char" style="color: {entry.color}; text-shadow: 0 0 5px {entry.color}88">{entry.char}</span>
         <span class="entry-label">
           {entry.count > 1 ? `${entry.count}x ` : ''}{entry.name}{#if entry.pet && !entry.hasGivenName}&nbsp;(pet){/if}
@@ -148,7 +169,15 @@
     align-items: center;
     gap: 4px;
     white-space: nowrap;
-    cursor: help;
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 1px 4px;
+    transition: background 0.1s;
+  }
+
+  .entry-inline:hover,
+  .entry-inline.hovered {
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .entry-char {

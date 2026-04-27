@@ -1,7 +1,9 @@
 <script lang="ts">
   import { gameState } from '../state/game.svelte';
+  import { uiState } from '../state/ui.svelte';
   import { connection } from '../services/wasm-connection';
   import { NLE_COLORS, getStructuralColor } from '../utils/colors';
+  import type { ItemEntity } from '../types/game';
   import {
     applyWheelZoom,
     reconcileViewport,
@@ -37,6 +39,40 @@
     return map;
   });
 
+  // Positions to highlight when a legend entry is hovered.
+  // Matches entities by the same char-name key the legend uses.
+  let highlightPositions = $derived.by(() => {
+    const key = uiState.hoveredLegendKey;
+    if (!key) return null;
+    const positions = new Set<string>();
+    for (const e of gameState.entities) {
+      if (e.type === 'item' && (e as ItemEntity).obscured) continue;
+      const name = e.type === 'monster' ? e.name : (e as any).category ?? 'item';
+      if (`${e.char}-${name}` === key) {
+        positions.add(`${e.x},${e.y}`);
+      }
+    }
+    // Also check doors from terrain exits — read the actual map char
+    // to match exactly what the legend uses (door glyphs vary by orientation).
+    if (gameState.terrain && gameState.map.length > 0) {
+      for (const exit of gameState.terrain.exits) {
+        if (exit.type !== 'closed door' && exit.type !== 'open door') continue;
+        const row = gameState.map[exit.y];
+        let mapChar = row ? row[exit.x] : '+';
+        const playerOnTile = gameState.player
+          && exit.x === gameState.player.x
+          && exit.y === gameState.player.y;
+        if (playerOnTile || mapChar === '@') {
+          mapChar = exit.type === 'open door' ? '/' : '+';
+        }
+        if (`${mapChar}-${exit.type}` === key) {
+          positions.add(`${exit.x},${exit.y}`);
+        }
+      }
+    }
+    return positions.size > 0 ? positions : null;
+  });
+
   // Crop empty rows/cols like Claude plays JSX
   let croppedMap = $derived.by(() => {
     const rows = gameState.map;
@@ -63,6 +99,7 @@
 
   function getCellStyle(char: string, x: number, y: number): string {
     const isCursor = gameState.cursor && x === gameState.cursor.x && y === gameState.cursor.y;
+    const isHighlighted = highlightPositions?.has(`${x},${y}`) ?? false;
     const isEnt = isCursor || isEntity(char);
 
     // Color comes from gameState.mapColors, which is NetHack's own
@@ -103,6 +140,13 @@
     // Glow for player and specific monster chars
     if (isCursor || GLOW_CHARS.has(char)) {
       style += `text-shadow:0 0 calc(7px * var(--zoom, 1)) ${color}88;`;
+    }
+
+    // Legend hover highlight — glow the matched cells, dim everything else
+    if (isHighlighted) {
+      style += `background:rgba(255,255,255,0.15);text-shadow:0 0 calc(8px * var(--zoom, 1)) ${color};`;
+    } else if (highlightPositions) {
+      style += 'opacity:0.3;';
     }
 
     return style;
