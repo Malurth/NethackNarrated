@@ -546,6 +546,8 @@ function visibleNarrationItems(state: GameState): ItemEntity[] {
 
   return state.entities.filter((e): e is ItemEntity => {
     if (e.type !== 'item') return false;
+    // Skip obscured items — the player hasn't confirmed seeing them
+    if (e.obscured) return false;
     const name = e.name || e.category;
     return !featureKeys.has(`${name}@${e.x},${e.y}`);
   });
@@ -1294,7 +1296,13 @@ export function buildCurrentStateBlock(state: GameState): string {
 
   const itemsList = visibleNarrationItems(state);
   const itemsBlock = itemsList.length > 0
-    ? `Items on the floor nearby:\n${itemsList.map(e => `  - ${e.name || e.category} (${describeRelativePos(p.x, p.y, e.x, e.y)})`).join('\n')}`
+    ? `Items on the floor nearby:\n${itemsList.map(e => {
+        const label = e.name || e.category;
+        const pos = describeRelativePos(p.x, p.y, e.x, e.y);
+        return e.remembered
+          ? `  - ${label} (${pos}, remembered — not currently visible)`
+          : `  - ${label} (${pos})`;
+      }).join('\n')}`
     : `Items on the floor nearby: (none visible)`;
 
   const inventoryBlock = state.inventory.length > 0

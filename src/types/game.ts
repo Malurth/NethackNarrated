@@ -45,6 +45,8 @@ export interface ItemEntity {
   char: string;
   color: number;
   name?: string;
+  obscured?: boolean;
+  remembered?: boolean;
 }
 
 export type Entity = MonsterEntity | ItemEntity;

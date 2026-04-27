@@ -624,7 +624,7 @@ export class NethackConnection {
       prompt_choices: promptChoices,
       menu_items: menuItems,
       menu_selection_mode: (activeMenu as any)?.selectionMode ?? null,
-      text_window_lines: [...this.pendingTextWindow],
+      text_window_lines: game.pendingInputType === "key" ? [...this.pendingTextWindow] : [],
       game_over: this._gameOver || game.phase === "gameOver",
       game_over_reason: this._gameOverReason,
       // The bulk terrain map is consumed by scanTerrain (which needs
@@ -735,8 +735,9 @@ export class NethackConnection {
       });
     }
 
-    // Add visible items from API (objects, statues, corpses) —
-    // includes obscured items (e.g. under a monster) so they appear in the legend
+    // Add visible items from API (objects, statues, corpses).
+    // Obscured items (under a monster/player) are included with the flag
+    // so consumers can decide whether to show them.
     const visibleItems = this.game.visibleItems || [];
     for (const item of visibleItems) {
       const name = item.tileLabel || item.tileType;
@@ -748,6 +749,24 @@ export class NethackConnection {
         char: item.ch,
         color: item.color,
         ...(item.tileLabel ? { name: item.tileLabel } : {}),
+        ...(item.obscured ? { obscured: true } : {}),
+      });
+    }
+
+    // Add remembered items — things the hero saw before but can no longer see.
+    // These come from NetHack's built-in glyph memory (levl[x][y].glyph).
+    const rememberedItems = (this.game as any).rememberedItems || [];
+    for (const item of rememberedItems) {
+      const name = item.tileLabel || item.tileType;
+      entities.push({
+        type: "item",
+        x: item.x,
+        y: item.y,
+        category: (item.tileType === "statue" || item.tileType === "corpse") ? name : item.category,
+        char: item.ch,
+        color: item.color,
+        ...(item.tileLabel ? { name: item.tileLabel } : {}),
+        remembered: true,
       });
     }
 

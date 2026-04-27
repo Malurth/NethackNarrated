@@ -1,6 +1,7 @@
 <script lang="ts">
   import { gameState } from '../state/game.svelte';
   import { NLE_COLORS } from '../utils/colors';
+  import type { ItemEntity } from '../types/game';
 
   interface LegendEntry {
     char: string;
@@ -9,6 +10,7 @@
     count: number;
     pet: boolean;
     hasGivenName: boolean;
+    remembered: boolean;
   }
 
   let legendEntries = $derived.by(() => {
@@ -18,8 +20,12 @@
       // Skip the player — we add a special entry for them
       if (gameState.player && e.x === gameState.player.x && e.y === gameState.player.y && e.char === '@') continue;
 
+      // Skip obscured items — the player hasn't actually seen them yet
+      if (e.type === 'item' && (e as ItemEntity).obscured) continue;
+
       const name = e.type === 'monster' ? e.name : (e as any).category ?? 'item';
-      const key = `${e.char}-${name}`;
+      const remembered = e.type === 'item' && !!(e as ItemEntity).remembered;
+      const key = `${e.char}-${name}${remembered ? '-rem' : ''}`;
       const existing = map.get(key);
       if (existing) {
         existing.count++;
@@ -31,6 +37,7 @@
           count: 1,
           pet: e.type === 'monster' && e.pet,
           hasGivenName: e.type === 'monster' && !!(e as any).givenName,
+          remembered,
         });
       }
     }
@@ -66,6 +73,7 @@
             count: 1,
             pet: false,
             hasGivenName: false,
+            remembered: false,
           });
         }
       }
@@ -86,7 +94,7 @@
       </span>
     {/if}
     {#each legendEntries as entry}
-      <span class="entry-inline">
+      <span class="entry-inline" class:remembered={entry.remembered}>
         <span class="entry-char" style="color: {entry.color}; text-shadow: 0 0 5px {entry.color}88">{entry.char}</span>
         <span class="entry-label">
           {entry.count > 1 ? `${entry.count}x ` : ''}{entry.name}{#if entry.pet && !entry.hasGivenName}&nbsp;(pet){/if}
@@ -152,5 +160,9 @@
   .entry-label {
     color: #445566;
     font-size: 12px;
+  }
+
+  .remembered {
+    opacity: 0.45;
   }
 </style>
