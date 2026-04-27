@@ -18,10 +18,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # file: dependencies in package.json resolve to ../neth4ck-monorepo
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: Malurth/neth4ck-monorepo
           ref: feat/api-layer
@@ -31,7 +31,7 @@ jobs:
       - name: Place monorepo at expected path
         run: mv neth4ck-monorepo "$GITHUB_WORKSPACE/../neth4ck-monorepo"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
