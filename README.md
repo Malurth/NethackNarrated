@@ -6,7 +6,7 @@ Play NetHack in the browser with AI-powered narration and gameplay analysis.
 
 ## About
 
-NethackNarrated is a browser-based NetHack frontend that pairs the classic roguelike with an AI narrator. As you explore the dungeon, an LLM watches your game and generates dramatic narration, color commentary, or strategic advice in real time.
+NethackNarrated is a browser-based NetHack frontend that pairs the classic roguelike with an AI narrator. As you explore the dungeon, an LLM watches your game and automatically generates dramatic narration in real time, with on-demand strategic advice made available as well.
 
 Supports both **NetHack 3.7** and **3.6.7**, running entirely client-side via WebAssembly — no server required.
 
@@ -42,7 +42,7 @@ Open `http://localhost:5173/`
 - **Svelte 5** with runes
 - **Vite** — dev server and build
 - **TypeScript**
-- **@neth4ck/api** — NetHack WASM interface ([neth4ck-monorepo](https://github.com/Malurth/neth4ck-monorepo))
+- **@neth4ck/api** — NetHack WASM interface ([neth4ck-monorepo](https://github.com/Malurth/neth4ck-monorepo/tree/feat/api-layer))
 - **Vercel AI SDK** — multi-provider LLM streaming
 
 ## Credits
