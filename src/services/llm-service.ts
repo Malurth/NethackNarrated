@@ -235,6 +235,16 @@ export class SeenRegistry {
     return this._monsterSpecies.has(name);
   }
 
+  /** Check if a floor item has been seen before (without marking it). */
+  hasSeenItem(name: string, x: number, y: number, dlvl: number): boolean {
+    return this._items.has(`dlvl${dlvl}:${name}@${x},${y}`);
+  }
+
+  /** Check if a map feature has been seen before (without marking it). */
+  hasSeenFeature(featureKey: string, dlvl: number): boolean {
+    return this._features.has(`dlvl${dlvl}:${featureKey}`);
+  }
+
   /** Register a floor item as seen. Returns true if first time.
    *  `dlvl` scopes the key so identical positions on different levels
    *  don't collide. */
@@ -253,6 +263,11 @@ export class SeenRegistry {
     if (this._features.has(key)) return false;
     this._features.add(key);
     return true;
+  }
+
+  /** Create a shallow clone (for snapshotting before per-turn diffs). */
+  clone(): SeenRegistry {
+    return SeenRegistry.fromJSON(this.toJSON());
   }
 
   /** Serialize for persistence. */
@@ -278,6 +293,7 @@ export class SeenRegistry {
 
 let lastTurnSnapshot: NarrationSnapshot | null = null;
 let lastNarrationSnapshot: NarrationSnapshot | null = null;
+let lastNarrationRegistrySnapshot: SeenRegistry | null = null;
 let turnLog: TurnRecord[] = [];
 export let seenRegistry = new SeenRegistry();
 
@@ -285,6 +301,7 @@ export let seenRegistry = new SeenRegistry();
 export function resetNarrationState(): void {
   lastTurnSnapshot = null;
   lastNarrationSnapshot = null;
+  lastNarrationRegistrySnapshot = null;
   turnLog = [];
   seenRegistry = new SeenRegistry();
   // Queue state — reset so a fresh game doesn't inherit an in-flight
@@ -357,6 +374,7 @@ export function loadNarrationStateForSlot(slotId: string): boolean {
     seenRegistry = parsed.seenRegistry
       ? SeenRegistry.fromJSON(parsed.seenRegistry)
       : new SeenRegistry();
+    lastNarrationRegistrySnapshot = seenRegistry.clone();
     console.log('[NARRATION RESTORE]', {
       slotId,
       entries: llmState.entries.length,
@@ -739,7 +757,14 @@ function diffPetsAcrossLevelChange(
   }
 }
 
-export function computeDiff(prev: NarrationSnapshot, state: GameState): string[] {
+export function computeDiff(prev: NarrationSnapshot, state: GameState, { registryOverride }: { registryOverride?: SeenRegistry } = {}): string[] {
+  // When a registryOverride is provided, use it for first-time checks
+  // without mutating the live seenRegistry. This is used by the aggregated
+  // diff so that entities registered by per-turn diffs (which ran first)
+  // are still correctly identified as "first time" relative to the narration
+  // baseline.
+  const reg = registryOverride ?? seenRegistry;
+  const readOnly = !!registryOverride;
   const current = captureSnapshot(state);
   const px = state.player.x;
   const py = state.player.y;
@@ -834,7 +859,9 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
     diffCreatures(
       prev.monsters, current.monsters, px, py,
       (name, pos) => {
-        const firstTime = seenRegistry.seeMonster(pos.m_id, name);
+        const firstTime = readOnly
+          ? !reg.hasSeenMonster(pos.m_id, name)
+          : seenRegistry.seeMonster(pos.m_id, name);
         const rel = describeRelativePos(px, py, pos.x, pos.y);
         return firstTime
           ? `A ${name} is here for the first time (${rel})`
@@ -846,8 +873,10 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
     );
     // Register monsters that were already visible (matched in prev,
     // not emitted as "appeared") so they're tracked going forward.
-    for (const c of current.monsters) {
-      seenRegistry.seeMonster(c.m_id, c.name);
+    if (!readOnly) {
+      for (const c of current.monsters) {
+        seenRegistry.seeMonster(c.m_id, c.name);
+      }
     }
   }
 
@@ -864,7 +893,9 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
     diffCreatures(
       prev.pets, current.pets, px, py,
       (name, pos) => {
-        const firstTime = seenRegistry.seeMonster(pos.m_id, name);
+        const firstTime = readOnly
+          ? !reg.hasSeenMonster(pos.m_id, name)
+          : seenRegistry.seeMonster(pos.m_id, name);
         const rel = describeRelativePos(px, py, pos.x, pos.y);
         return firstTime
           ? `Your pet ${name} appeared for the first time (${rel})`
@@ -876,8 +907,10 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
     );
   }
   // Register all currently visible pets regardless of path
-  for (const c of current.pets) {
-    seenRegistry.seeMonster(c.m_id, c.name);
+  if (!readOnly) {
+    for (const c of current.pets) {
+      seenRegistry.seeMonster(c.m_id, c.name);
+    }
   }
 
   // Items — within-level only. Same reasoning as monsters: items on
@@ -889,15 +922,19 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
     const currItems = new Map(current.items.map(i => [`${i.name}@${i.x},${i.y}`, i]));
     for (const [key, item] of currItems) {
       if (!prevItems.has(key)) {
-        const firstTime = seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
+        const firstTime = readOnly
+          ? !reg.hasSeenItem(item.name, item.x, item.y, current.dlvl)
+          : seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
         lines.push(firstTime
           ? `Discovered ${item.name} (${describeRelativePos(px, py, item.x, item.y)}) [new]`
           : `${item.name} visible again (${describeRelativePos(px, py, item.x, item.y)})`);
       }
     }
     // Register all currently visible items
-    for (const item of current.items) {
-      seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
+    if (!readOnly) {
+      for (const item of current.items) {
+        seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
+      }
     }
     for (const [key, item] of prevItems) {
       if (!currItems.has(key)) {
@@ -962,21 +999,25 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState): string[]
       if (!prevFeatureSet.has(key)) {
         const [name, coords] = key.split('@');
         const [x, y] = coords.split(',').map(Number);
-        const firstTime = seenRegistry.seeFeature(key, current.dlvl);
+        const firstTime = readOnly
+          ? !reg.hasSeenFeature(key, current.dlvl)
+          : seenRegistry.seeFeature(key, current.dlvl);
         lines.push(firstTime
           ? `Discovered ${name} (${describeRelativePos(px, py, x, y)}) [new]`
           : `${name} visible again (${describeRelativePos(px, py, x, y)})`);
       }
     }
     // Register all currently visible features
-    for (const key of current.featureKeys) {
-      seenRegistry.seeFeature(key, current.dlvl);
+    if (!readOnly) {
+      for (const key of current.featureKeys) {
+        seenRegistry.seeFeature(key, current.dlvl);
+      }
     }
   }
 
   // On level change, register all entities on the new level so they're
   // tracked even though we skip the within-level diff.
-  if (levelChanged) {
+  if (levelChanged && !readOnly) {
     for (const c of current.monsters) seenRegistry.seeMonster(c.m_id, c.name);
     for (const c of current.pets) seenRegistry.seeMonster(c.m_id, c.name);
     for (const item of current.items) seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
@@ -1552,9 +1593,10 @@ async function runNarrationLoop(): Promise<void> {
       const log = turnLog.slice();
       turnLog = [];
       const aggregatedDiff = lastNarrationSnapshot
-        ? computeDiff(lastNarrationSnapshot, state)
+        ? computeDiff(lastNarrationSnapshot, state, { registryOverride: lastNarrationRegistrySnapshot ?? undefined })
         : [];
       lastNarrationSnapshot = captureSnapshot(state);
+      lastNarrationRegistrySnapshot = seenRegistry.clone();
 
       try {
         await narrate(state, log, aggregatedDiff);
@@ -1620,6 +1662,7 @@ export function maybeNarrate(state: GameState): void {
   // Initialize narration snapshot on first turn
   if (!lastNarrationSnapshot) {
     lastNarrationSnapshot = lastTurnSnapshot;
+    lastNarrationRegistrySnapshot = seenRegistry.clone();
   }
 
   if (!llmState.isConfigured) return;

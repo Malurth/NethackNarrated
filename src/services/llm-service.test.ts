@@ -841,6 +841,81 @@ describe('computeDiff — seen registry (object permanence)', () => {
     // Clean up
     clearNarrationStateForSlot(slotId);
   });
+
+  it('aggregated diff reports "first time" even after per-turn diff already registered the entity', () => {
+    // Simulate the real flow: per-turn diffs run first (mutating), then the
+    // aggregated diff runs with registryOverride spanning the same range.
+    // The aggregated diff must still say "first time" because the entity was
+    // not in the registry at the narration baseline.
+
+    // Narration baseline: no monsters — snapshot the registry at this point
+    const narrationBaseline = captureSnapshot(makeState({ turn: 1, entities: [] }));
+    const baselineRegistry = seenRegistry.clone();
+
+    // Turn 1→2: nothing happens
+    const turnSnap1 = captureSnapshot(makeState({ turn: 1, entities: [] }));
+    const s2 = makeState({ turn: 2, entities: [] });
+    computeDiff(turnSnap1, s2); // per-turn diff (mutating)
+
+    // Turn 2→3: newt appears — per-turn diff registers it
+    const turnSnap2 = captureSnapshot(s2);
+    const s3 = makeState({ turn: 3, entities: [monster('newt', 13, 9, 99)] });
+    const perTurnDiff = computeDiff(turnSnap2, s3); // mutating
+    expect(perTurnDiff).toContain('A newt is here for the first time (3 tiles north-east)');
+
+    // Aggregated diff using the baseline registry — newt wasn't known then
+    const aggDiff = computeDiff(narrationBaseline, s3, { registryOverride: baselineRegistry });
+    expect(aggDiff).toContain('A newt is here for the first time (3 tiles north-east)');
+    expect(aggDiff.join('\n')).not.toContain('reappeared');
+  });
+
+  it('aggregated diff reports "reappeared" for entities already in the registry at the baseline', () => {
+    // Pre-register a monster: it appears on turn 1 (registered), disappears on turn 2
+    const s0 = makeState({ turn: 1, entities: [] });
+    const snap0 = captureSnapshot(s0);
+    const s1 = makeState({ turn: 2, entities: [monster('lichen', 14, 10, 42)] });
+    computeDiff(snap0, s1); // lichen appears → registered as seen
+    expect(seenRegistry.hasSeenMonster(42, 'lichen')).toBe(true);
+
+    // Turn 2→3: lichen disappears
+    const snap1 = captureSnapshot(s1);
+    const s2 = makeState({ turn: 3, entities: [] });
+    computeDiff(snap1, s2);
+
+    // Narration baseline: lichen is gone — snapshot the registry (lichen IS known)
+    const narrationBaseline = captureSnapshot(s2);
+    const baselineRegistry = seenRegistry.clone();
+
+    // Turn 3→4: still no lichen
+    const turnSnap3 = captureSnapshot(s2);
+    const s4 = makeState({ turn: 4, entities: [] });
+    computeDiff(turnSnap3, s4); // mutating, no change
+
+    // Turn 4→5: lichen reappears — per-turn diff says "reappeared" (already known)
+    const turnSnap4 = captureSnapshot(s4);
+    const s5 = makeState({ turn: 5, entities: [monster('lichen', 12, 10, 42)] });
+    const perTurnDiff = computeDiff(turnSnap4, s5); // mutating
+    expect(perTurnDiff).toContain('A lichen reappeared (2 tiles east)');
+
+    // Aggregated diff (baseline→s5) should also say "reappeared" since the
+    // lichen was already known in the baseline registry
+    const aggDiff = computeDiff(narrationBaseline, s5, { registryOverride: baselineRegistry });
+    expect(aggDiff).toContain('A lichen reappeared (2 tiles east)');
+  });
+
+  it('registryOverride diff does not mutate the live registry', () => {
+    const prev = captureSnapshot(makeState({ turn: 1, entities: [] }));
+    const next = makeState({ turn: 2, entities: [monster('jackal', 14, 10, 77)] });
+    const frozenRegistry = seenRegistry.clone();
+
+    // Diff with registryOverride should not register the jackal
+    computeDiff(prev, next, { registryOverride: frozenRegistry });
+    expect(seenRegistry.hasSeenMonster(77, 'jackal')).toBe(false);
+
+    // Normal diff should register it
+    computeDiff(prev, next);
+    expect(seenRegistry.hasSeenMonster(77, 'jackal')).toBe(true);
+  });
 });
 
 describe('narrate — prompt selection', () => {
