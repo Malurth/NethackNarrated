@@ -101,7 +101,7 @@
   );
 
   const dotClass = $derived(
-    llmState.triggerConfig.activePreset === 'off' ? 'off' : llmState.isNarrationEnabled ? 'on' : 'off'
+    !llmState.isNarrationEnabled ? 'off' : llmState.allTriggersEnabled ? 'on' : 'partial'
   );
 </script>
 
@@ -219,6 +219,10 @@
 
   .mode-dot.on {
     background: var(--hp-bar);
+  }
+
+  .mode-dot.partial {
+    background: #e6c619;
   }
 
   .mode-dot.off {

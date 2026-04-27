@@ -31,7 +31,7 @@ export const TRIGGER_LABELS: Record<NarrationTrigger, string> = {
 export type PresetName = 'standard' | 'minimal' | 'off';
 
 export const PRESET_LABELS: Record<PresetName, string> = {
-  standard: 'Standard',
+  standard: 'On',
   minimal: 'Minimal',
   off: 'Off',
 };

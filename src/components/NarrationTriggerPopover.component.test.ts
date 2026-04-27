@@ -12,7 +12,7 @@ async function flushFrame() {
 }
 import NarrationTriggerPopover from './NarrationTriggerPopover.svelte';
 import { llmState } from '../state/llm.svelte';
-import { defaultTriggerConfig, ALL_TRIGGERS, TRIGGER_LABELS, PRESET_LABELS, ALL_PRESETS } from '../types/narration-triggers';
+import { defaultTriggerConfig, ALL_TRIGGERS, TRIGGER_LABELS, PRESET_LABELS, ALL_PRESETS, PRESETS } from '../types/narration-triggers';
 
 beforeEach(() => {
   llmState.triggerConfig = defaultTriggerConfig();
@@ -22,7 +22,7 @@ describe('NarrationTriggerPopover', () => {
   it('renders the toggle button with preset label', () => {
     render(NarrationTriggerPopover);
     expect(screen.getByTitle('Configure narration triggers')).toBeInTheDocument();
-    expect(screen.getByText('Standard')).toBeInTheDocument();
+    expect(screen.getByText('On')).toBeInTheDocument();
   });
 
   it('opens popover on click showing presets and triggers', async () => {
@@ -138,6 +138,29 @@ describe('NarrationTriggerPopover', () => {
 
     // top = 96, available = 100 - 96 - 12 = -8, clamped to 80
     expect(popover.style.maxHeight).toBe('80px');
+  });
+
+  it('shows green dot when all triggers are enabled', () => {
+    llmState.triggerConfig = { ...llmState.triggerConfig, triggers: { ...PRESETS.standard } };
+    render(NarrationTriggerPopover);
+    const dot = document.querySelector('.mode-dot');
+    expect(dot).toHaveClass('on');
+  });
+
+  it('shows yellow dot when some but not all triggers are enabled', () => {
+    const triggers = { ...PRESETS.standard };
+    triggers[ALL_TRIGGERS[0]] = false;
+    llmState.triggerConfig = { ...llmState.triggerConfig, triggers, activePreset: 'custom' };
+    render(NarrationTriggerPopover);
+    const dot = document.querySelector('.mode-dot');
+    expect(dot).toHaveClass('partial');
+  });
+
+  it('shows grey dot when no triggers are enabled', () => {
+    llmState.triggerConfig = { ...llmState.triggerConfig, triggers: { ...PRESETS.off }, activePreset: 'off' };
+    render(NarrationTriggerPopover);
+    const dot = document.querySelector('.mode-dot');
+    expect(dot).toHaveClass('off');
   });
 
   it('continuously repositions via rAF to track layout changes like panel resizing', async () => {

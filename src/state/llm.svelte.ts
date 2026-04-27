@@ -84,6 +84,11 @@ class LLMStore {
     return ALL_TRIGGERS.some(t => this.triggerConfig.triggers[t]);
   }
 
+  /** True if every trigger is enabled. */
+  get allTriggersEnabled(): boolean {
+    return ALL_TRIGGERS.every(t => this.triggerConfig.triggers[t]);
+  }
+
   setPreset(name: PresetName) {
     this.triggerConfig = {
       ...this.triggerConfig,
