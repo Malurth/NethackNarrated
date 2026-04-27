@@ -8,6 +8,7 @@ beforeEach(() => {
   uiState.selectedInventoryItem = null;
   uiState.keyboardEnabled = true;
   uiState.autoResolvePickNone = true;
+  uiState.cameraFollow = true;
 });
 
 describe('UIStore defaults', () => {
@@ -77,8 +78,9 @@ describe('UIStore localStorage restore', () => {
     // The constructor only reads autoResolvePickNone — unknown fields are ignored
     // We can't re-run the constructor, but we verify saveSettings doesn't include extras
     uiState.autoResolvePickNone = false;
+    uiState.cameraFollow = false;
     uiState.saveSettings();
     const saved = JSON.parse(localStorage.getItem('nethack-ui-settings')!);
-    expect(saved).toEqual({ autoResolvePickNone: false });
+    expect(saved).toEqual({ autoResolvePickNone: false, cameraFollow: false });
   });
 });

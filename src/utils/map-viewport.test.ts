@@ -4,6 +4,7 @@ import {
   computeMinZoom,
   applyWheelZoom,
   reconcileViewport,
+  playerFollowPan,
   type ViewportBounds,
 } from './map-viewport';
 
@@ -89,6 +90,50 @@ describe('clampPan', () => {
     expect(p.x).toBe(-200); // clamp floor = 800 - 1000 = -200
     expect(p.y).toBe(50); // centered — user attempt ignored
   });
+
+  describe('with padding', () => {
+    it('expands the allowed pan range by padding on each side', () => {
+      // At zoom = 4: scaled map is 1600x800.
+      //   Without padding: panX in [-800, 0], panY in [-200, 0].
+      //   With padding 50: panX in [-850, 50], panY in [-250, 50].
+      const p = clampPan({ x: 50, y: 50 }, 4, B, 50);
+      expect(p.x).toBe(50);
+      expect(p.y).toBe(50);
+
+      const p2 = clampPan({ x: -850, y: -250 }, 4, B, 50);
+      expect(p2.x).toBe(-850);
+      expect(p2.y).toBe(-250);
+    });
+
+    it('still clamps beyond the padded range', () => {
+      const p = clampPan({ x: 100, y: 100 }, 4, B, 50);
+      expect(p.x).toBe(50);
+      expect(p.y).toBe(50);
+
+      const p2 = clampPan({ x: -900, y: -300 }, 4, B, 50);
+      expect(p2.x).toBe(-850);
+      expect(p2.y).toBe(-250);
+    });
+
+    it('centers when map+padding is still smaller than container', () => {
+      // Small map: 100x50, zoom 1. Scaled = 100x50.
+      // With padding 50: 100 + 100 = 200 < 800 → still center.
+      const small: ViewportBounds = { cw: 800, ch: 600, mw: 100, mh: 50 };
+      const p = clampPan({ x: 999, y: 999 }, 1, small, 50);
+      expect(p.x).toBe((800 - 100) / 2);
+      expect(p.y).toBe((600 - 50) / 2);
+    });
+
+    it('unlocks centering when padding makes map+padding >= container', () => {
+      // Map 700 wide at zoom 1, container 800.
+      // Without padding: 700 < 800 → centered at (800-700)/2 = 50.
+      // With padding 60: 700 + 120 = 820 >= 800 → free pan.
+      //   Range: [800 - 700 - 60, 60] = [40, 60].
+      const b: ViewportBounds = { cw: 800, ch: 600, mw: 700, mh: 50 };
+      const p = clampPan({ x: 55, y: 0 }, 1, b, 60);
+      expect(p.x).toBe(55);
+    });
+  });
 });
 
 describe('applyWheelZoom', () => {
@@ -159,6 +204,18 @@ describe('applyWheelZoom', () => {
     const v = applyWheelZoom(atMax, { x: 400, y: 300 }, -500, B, minZoom, maxZoom);
     expect(v).toEqual(atMax);
   });
+
+  it('passes padding through to clampPan', () => {
+    // With large padding, pan is allowed past the normal range.
+    const b: ViewportBounds = { cw: 800, ch: 600, mw: 400, mh: 400 };
+    const start = { zoom: 3, panX: 0, panY: 0 }; // at top-left edge
+    // Zoom in at top-left corner — without padding, panX/panY would be clamped to 0.
+    // With padding, it can go positive.
+    const v = applyWheelZoom(start, { x: 0, y: 0 }, -200, b, 1.5, 5, 0.0015, 100);
+    // The anchor at (0,0) means pan should stay at 0 or go positive (into padding).
+    expect(v.panX).toBeGreaterThanOrEqual(0);
+    expect(v.panX).toBeLessThanOrEqual(100);
+  });
 });
 
 describe('reconcileViewport', () => {
@@ -199,5 +256,116 @@ describe('reconcileViewport', () => {
     expect(r.viewport.panX).toBe(0);
     // Height: 400 < 600 → centered at (600-400)/2 = 100.
     expect(r.viewport.panY).toBe(100);
+  });
+
+  it('passes padding through to clampPan', () => {
+    // At zoom 2, scaled map is 800x400. Without padding, panX locked at 0.
+    // With padding 50, panX range is [-50, 50].
+    const r = reconcileViewport({ zoom: 2, panX: 30, panY: 0 }, B, 50);
+    expect(r.viewport.panX).toBe(30); // within padded range
+  });
+});
+
+describe('playerFollowPan', () => {
+  // Large map so we have room to test follow behavior.
+  // Container 800x600, map 600x400 natural. At zoom 2: 1200x800.
+  const FB: ViewportBounds = { cw: 800, ch: 600, mw: 600, mh: 400 };
+  const margin = 0.3;
+
+  it('does not move pan when player is inside the dead zone', () => {
+    // Player at natural (300, 200) — center of the map.
+    // At zoom 2, pan (-200, -100): player viewport pos = 300*2 + (-200) = 400, 200*2 + (-100) = 300.
+    // Dead zone X: [240, 560], Y: [180, 420]. Player at (400, 300) → inside.
+    const result = playerFollowPan(
+      { zoom: 2, panX: -200, panY: -100 },
+      { x: 300, y: 200 },
+      FB,
+      margin,
+    );
+    expect(result.panX).toBe(-200);
+    expect(result.panY).toBe(-100);
+  });
+
+  it('adjusts panX when player drifts past the right dead-zone edge', () => {
+    // Player at natural (500, 200). At zoom 2, pan (0, -100):
+    //   pvx = 500*2 + 0 = 1000 → way past dzRight = 800*0.7 = 560.
+    //   Expected newPanX = 560 - 500*2 = -440.
+    const result = playerFollowPan(
+      { zoom: 2, panX: 0, panY: -100 },
+      { x: 500, y: 200 },
+      FB,
+      margin,
+    );
+    // Follow wants -440 but clamp floor is cw - mw*zoom = 800 - 1200 = -400.
+    expect(result.panX).toBe(-400);
+    expect(result.panY).toBe(-100); // Y unchanged (in dead zone)
+  });
+
+  it('adjusts panX when player drifts past the left dead-zone edge', () => {
+    // Player at natural (50, 200). At zoom 2, pan (-400, -100):
+    //   pvx = 50*2 + (-400) = -300 → past dzLeft = 800*0.3 = 240.
+    //   Expected newPanX = 240 - 50*2 = 140 → clamped to 0 (can't go positive without padding).
+    const result = playerFollowPan(
+      { zoom: 2, panX: -400, panY: -100 },
+      { x: 50, y: 200 },
+      FB,
+      margin,
+    );
+    expect(result.panX).toBe(0); // clamped
+  });
+
+  it('adjusts panY when player drifts past the bottom dead-zone edge', () => {
+    // Player at natural (300, 350). At zoom 2, pan (-200, 0):
+    //   pvy = 350*2 + 0 = 700 → past dzBottom = 600*0.7 = 420.
+    //   Expected newPanY = 420 - 350*2 = -280.
+    const result = playerFollowPan(
+      { zoom: 2, panX: -200, panY: 0 },
+      { x: 300, y: 350 },
+      FB,
+      margin,
+    );
+    expect(result.panY).toBe(-200); // clamped to floor: 600 - 400*2 = -200
+  });
+
+  it('adjusts both axes simultaneously', () => {
+    // Player at far bottom-right corner.
+    const result = playerFollowPan(
+      { zoom: 2, panX: 0, panY: 0 },
+      { x: 550, y: 380 },
+      FB,
+      margin,
+    );
+    // Both axes should have been adjusted.
+    expect(result.panX).toBeLessThan(0);
+    expect(result.panY).toBeLessThan(0);
+  });
+
+  it('respects padding when clamping the follow result', () => {
+    // Player at far left edge, padding allows pan past 0.
+    const result = playerFollowPan(
+      { zoom: 2, panX: -400, panY: -100 },
+      { x: 50, y: 200 },
+      FB,
+      margin,
+      80, // 80px padding
+    );
+    // Without padding: clamped to 0. With padding 80: allowed up to 80.
+    // newPanX = dzLeft - 50*2 = 240 - 100 = 140 → clamped to 80.
+    expect(result.panX).toBe(80);
+  });
+
+  it('returns clamped result even when player is centered', () => {
+    // Start with an out-of-range pan. Player is centered so follow
+    // doesn't move it, but clampPan should still fix the range.
+    const result = playerFollowPan(
+      { zoom: 2, panX: 9999, panY: 9999 },
+      { x: 300, y: 200 },
+      FB,
+      margin,
+    );
+    // Player at center: pvx = 300*2 + 9999 = 10599 → past dzRight.
+    // So follow adjusts, then clamp fixes.
+    expect(result.panX).toBeLessThanOrEqual(0);
+    expect(result.panY).toBeLessThanOrEqual(0);
   });
 });

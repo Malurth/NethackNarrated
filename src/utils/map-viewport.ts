@@ -24,36 +24,36 @@ export interface Viewport {
 }
 
 /**
- * Clamp pan so the container is always fully inside the scaled map rect.
+ * Clamp pan so the container stays mostly inside the scaled map rect.
  *
- * On axes where the scaled map is larger than the container, the pan
- * has a normal range `[cw - mw*zoom, 0]` that keeps the container inside
- * the map. On axes where the scaled map is *smaller* than the container,
- * there's geometric dead space no matter what, so we lock the pan to a
- * centered position (equal dead space on both sides). This matches the
- * pre-zoom visual where the fully-zoomed-out map was centered in the
- * container.
+ * `padding` (CSS pixels) relaxes the hard edge constraint, allowing the
+ * map to be panned up to `padding` pixels past each edge. This gives
+ * visual breathing room at the frontier of explored territory — the
+ * player can see a strip of darkness past the known map, cueing them
+ * that unexplored area exists.
+ *
+ * When padding is 0 (default), behavior is identical to the old
+ * "no dead space ever" rule.
  */
 export function clampPan(
   pan: { x: number; y: number },
   zoom: number,
   b: ViewportBounds,
+  padding = 0,
 ): { x: number; y: number } {
   const sw = b.mw * zoom;
   const sh = b.mh * zoom;
 
   let x: number;
-  if (sw >= b.cw) {
-    // Map wider than container — free to pan within the clamp window.
-    x = Math.min(0, Math.max(b.cw - sw, pan.x));
+  if (sw + 2 * padding >= b.cw) {
+    x = Math.min(padding, Math.max(b.cw - sw - padding, pan.x));
   } else {
-    // Map narrower than container — center on this axis.
     x = (b.cw - sw) / 2;
   }
 
   let y: number;
-  if (sh >= b.ch) {
-    y = Math.min(0, Math.max(b.ch - sh, pan.y));
+  if (sh + 2 * padding >= b.ch) {
+    y = Math.min(padding, Math.max(b.ch - sh - padding, pan.y));
   } else {
     y = (b.ch - sh) / 2;
   }
@@ -89,6 +89,7 @@ export function applyWheelZoom(
   minZoom: number,
   maxZoom: number,
   speed = 0.0015,
+  padding = 0,
 ): Viewport {
   const oldZoom = current.zoom;
   const rawNew = oldZoom * (1 - deltaY * speed);
@@ -100,7 +101,7 @@ export function applyWheelZoom(
   const targetPanX = cursor.x - (cursor.x - current.panX) * factor;
   const targetPanY = cursor.y - (cursor.y - current.panY) * factor;
 
-  const clamped = clampPan({ x: targetPanX, y: targetPanY }, newZoom, b);
+  const clamped = clampPan({ x: targetPanX, y: targetPanY }, newZoom, b, padding);
   return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
 }
 
@@ -118,15 +119,62 @@ export function applyWheelZoom(
 export function reconcileViewport(
   current: Viewport,
   b: ViewportBounds,
+  padding = 0,
 ): { viewport: Viewport; minZoom: number } {
   const minZoom = computeMinZoom(b);
   let zoom = current.zoom;
   if (zoom === 0 || zoom < minZoom) {
     zoom = minZoom;
   }
-  const clamped = clampPan({ x: current.panX, y: current.panY }, zoom, b);
+  const clamped = clampPan({ x: current.panX, y: current.panY }, zoom, b, padding);
   return {
     viewport: { zoom, panX: clamped.x, panY: clamped.y },
     minZoom,
   };
+}
+
+/**
+ * Compute the pan offset needed to keep the player inside a dead-zone
+ * rectangle centered in the viewport. If the player is already inside
+ * the dead zone, the current pan is returned unchanged. If they've
+ * drifted outside, pan is adjusted by the minimum amount to bring them
+ * back to the dead-zone edge.
+ *
+ * @param current       Current viewport state.
+ * @param playerNat     Player position in natural (zoom=1) map pixels,
+ *                      relative to the top-left of the rendered map element.
+ * @param b             Container + map dimensions.
+ * @param marginFraction  Fraction of the viewport reserved as margin on
+ *                        each side (0.3 = 30% margin, 40% center dead zone).
+ * @param padding       Passed through to clampPan for edge relaxation.
+ */
+export function playerFollowPan(
+  current: Viewport,
+  playerNat: { x: number; y: number },
+  b: ViewportBounds,
+  marginFraction = 0.3,
+  padding = 0,
+): { panX: number; panY: number } {
+  const { zoom, panX, panY } = current;
+
+  // Player's position in viewport (container) coordinates.
+  const pvx = playerNat.x * zoom + panX;
+  const pvy = playerNat.y * zoom + panY;
+
+  // Dead-zone boundaries.
+  const dzLeft = b.cw * marginFraction;
+  const dzRight = b.cw * (1 - marginFraction);
+  const dzTop = b.ch * marginFraction;
+  const dzBottom = b.ch * (1 - marginFraction);
+
+  let newPanX = panX;
+  if (pvx < dzLeft) newPanX = dzLeft - playerNat.x * zoom;
+  else if (pvx > dzRight) newPanX = dzRight - playerNat.x * zoom;
+
+  let newPanY = panY;
+  if (pvy < dzTop) newPanY = dzTop - playerNat.y * zoom;
+  else if (pvy > dzBottom) newPanY = dzBottom - playerNat.y * zoom;
+
+  const clamped = clampPan({ x: newPanX, y: newPanY }, zoom, b, padding);
+  return { panX: clamped.x, panY: clamped.y };
 }

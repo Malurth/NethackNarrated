@@ -8,6 +8,7 @@
     applyWheelZoom,
     reconcileViewport,
     clampPan,
+    playerFollowPan,
     type ViewportBounds,
   } from '../utils/map-viewport';
 
@@ -156,14 +157,10 @@
     return entityTooltipMap.get(`${x},${y}`) ?? '';
   }
 
-  // ── Viewport state (user-controlled pan + zoom) ──────────────────
-  // Replaces the old auto-fit scale. Wheel scrolls zoom around the
-  // cursor, middle-mouse drag pans, and the clamp math in
-  // `utils/map-viewport.ts` keeps the container fully inside the
-  // rendered map rectangle at all times — no dead space past the
-  // map edges is ever pannable to.
+  // ── Viewport constants ────────────────────────────────────────────
   const MAX_ZOOM = 5;
 
+  // ── Viewport state (user-controlled pan + zoom) ──────────────────
   let containerEl: HTMLDivElement;
   let mapEl: HTMLPreElement;
 
@@ -175,6 +172,19 @@
 
   // Scratch state held across a middle-mouse drag
   let dragStart = { x: 0, y: 0, panX: 0, panY: 0 };
+
+  /** Padding in CSS px — how far past map edges the viewport can pan.
+   *  In follow mode this must be generous so the dead zone can always be
+   *  maintained even when the player is near a map edge (e.g. only 2
+   *  rows from the top of the known map).  In manual mode it's kept
+   *  tight so the user doesn't drift into vast empty darkness. */
+  function getPadding(): number {
+    if (!containerEl) return 0;
+    if (uiState.cameraFollow) {
+      return Math.max(containerEl.clientWidth, containerEl.clientHeight) * 0.5;
+    }
+    return Math.min(containerEl.clientWidth, containerEl.clientHeight) * 0.15;
+  }
 
   /** Read current container/map dimensions. Returns natural (zoom=1)
    *  map dimensions so the clamp math in map-viewport.ts can keep
@@ -195,36 +205,102 @@
     return { cw, ch, mw, mh };
   }
 
+  /** Player position in natural (zoom=1) map pixels, derived from the
+   *  measured DOM dimensions — NOT hardcoded cell sizes.  This avoids
+   *  any mismatch between assumed vs actual font-metric cell height. */
+  function playerNatPos(b: ViewportBounds): { x: number; y: number } | null {
+    const p = gameState.player;
+    if (!p) return null;
+    const cm = croppedMap;
+    const numCols = cm.rows[0]?.length || 1;
+    const numRows = cm.rows.length || 1;
+    const cellW = b.mw / numCols;
+    const cellH = b.mh / numRows;
+    const x = (p.x - cm.minCol + 0.5) * cellW;
+    const y = (p.y - (cm.minRow ?? 0) + 0.5) * cellH;
+    return { x, y };
+  }
+
+  /** Measured natural cell height for the current map layout. */
+  function measuredCellH(b: ViewportBounds): number {
+    const numRows = croppedMap.rows.length || 1;
+    return b.mh / numRows;
+  }
+
+  /** Run follow-camera logic: nudge pan so the player stays in the
+   *  dead zone.  Called from updateBounds and after wheel zoom. */
+  function applyFollow(b: ViewportBounds) {
+    const pn = playerNatPos(b);
+    if (!pn) return;
+    const pad = getPadding();
+    const cellH = measuredCellH(b);
+    const minMarginPx = 1.5 * cellH * zoom;
+    const margin = Math.max(0.15, Math.min(0.45, minMarginPx / b.ch));
+    const follow = playerFollowPan(
+      { zoom, panX, panY },
+      pn,
+      b,
+      margin,
+      pad,
+    );
+    panX = follow.panX;
+    panY = follow.panY;
+  }
+
   function updateBounds() {
     const b = readBounds();
     if (!b) return;
+    const pad = getPadding();
     const { viewport, minZoom: newMin } = reconcileViewport(
       { zoom, panX, panY },
       b,
+      pad,
     );
     minZoom = newMin;
     zoom = viewport.zoom;
     panX = viewport.panX;
     panY = viewport.panY;
+
+    if (uiState.cameraFollow) {
+      applyFollow(b);
+    }
   }
 
   function handleWheel(e: WheelEvent) {
     const b = readBounds();
     if (!b) return;
     e.preventDefault();
-    const rect = containerEl.getBoundingClientRect();
-    const cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const pad = getPadding();
+
+    // In follow mode, anchor the zoom on the player so the camera
+    // stays centered on them. In manual mode, anchor on the mouse.
+    let anchor: { x: number; y: number };
+    const pn = uiState.cameraFollow ? playerNatPos(b) : null;
+    if (pn) {
+      anchor = { x: pn.x * zoom + panX, y: pn.y * zoom + panY };
+    } else {
+      const rect = containerEl.getBoundingClientRect();
+      anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
     const v = applyWheelZoom(
       { zoom, panX, panY },
-      cursor,
+      anchor,
       e.deltaY,
       b,
       minZoom,
       MAX_ZOOM,
+      0.0015,
+      pad,
     );
     zoom = v.zoom;
     panX = v.panX;
     panY = v.panY;
+
+    // Re-run follow after zoom so the dead zone is maintained.
+    if (uiState.cameraFollow) {
+      applyFollow(b);
+    }
   }
 
   function handlePointerDown(e: PointerEvent) {
@@ -235,6 +311,9 @@
     isDragging = true;
     dragStart = { x: e.clientX, y: e.clientY, panX, panY };
     containerEl.setPointerCapture(e.pointerId);
+    // Manual drag disables auto-follow.
+    uiState.cameraFollow = false;
+    uiState.saveSettings();
   }
 
   function handlePointerMove(e: PointerEvent) {
@@ -243,7 +322,7 @@
     if (!b) return;
     const nextX = dragStart.panX + (e.clientX - dragStart.x);
     const nextY = dragStart.panY + (e.clientY - dragStart.y);
-    const clamped = clampPan({ x: nextX, y: nextY }, zoom, b);
+    const clamped = clampPan({ x: nextX, y: nextY }, zoom, b, getPadding());
     panX = clamped.x;
     panY = clamped.y;
   }
@@ -253,6 +332,15 @@
     isDragging = false;
     if (containerEl.hasPointerCapture?.(e.pointerId)) {
       containerEl.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  function toggleFollow() {
+    uiState.cameraFollow = !uiState.cameraFollow;
+    uiState.saveSettings();
+    // When re-enabling follow, immediately snap to player.
+    if (uiState.cameraFollow) {
+      updateBounds();
     }
   }
 
@@ -294,6 +382,34 @@
         tabindex="-1"
       >{char}</span>{/each}</span>
 {/each}</pre>
+
+  <button
+    class="camera-toggle"
+    class:follow={uiState.cameraFollow}
+    onclick={toggleFollow}
+    title={uiState.cameraFollow ? 'Camera: following player (click to switch to manual pan)' : 'Camera: manual pan (click to follow player)'}
+  >
+    {#if uiState.cameraFollow}
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="3" />
+        <line x1="8" y1="1" x2="8" y2="4" />
+        <line x1="8" y1="12" x2="8" y2="15" />
+        <line x1="1" y1="8" x2="4" y2="8" />
+        <line x1="12" y1="8" x2="15" y2="8" />
+      </svg>
+    {:else}
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
+        <line x1="3" y1="8" x2="1" y2="8" />
+        <line x1="15" y1="8" x2="13" y2="8" />
+        <line x1="8" y1="3" x2="8" y2="1" />
+        <line x1="8" y1="15" x2="8" y2="13" />
+        <polyline points="1,8 3,6.5 3,9.5" />
+        <polyline points="15,8 13,6.5 13,9.5" />
+        <polyline points="8,1 6.5,3 9.5,3" />
+        <polyline points="8,15 6.5,13 9.5,13" />
+      </svg>
+    {/if}
+  </button>
 </div>
 
 <style>
@@ -352,5 +468,39 @@
 
   .map-cell:hover {
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  .camera-toggle {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: rgba(3, 6, 8, 0.8);
+    color: #888;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    z-index: 1;
+  }
+
+  .camera-toggle:hover {
+    color: #ccc;
+    border-color: #666;
+  }
+
+  .camera-toggle.follow {
+    color: #00ff88;
+    border-color: #00ff8844;
+  }
+
+  .camera-toggle.follow:hover {
+    color: #33ffaa;
+    border-color: #00ff8888;
   }
 </style>
