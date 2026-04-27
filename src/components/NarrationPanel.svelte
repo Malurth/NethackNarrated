@@ -4,6 +4,7 @@
   import { analyze } from '../services/llm-service';
   import NarrationTriggerPopover from './NarrationTriggerPopover.svelte';
   import { derivePalette } from '../utils/color-derive';
+  import { formatInlineMarkdown } from '../utils/format-markdown';
   import type { GameState } from '../types/game';
 
   const narrationPalette = $derived(derivePalette(llmState.narrationHue, llmState.narrationIntensity));
@@ -100,7 +101,7 @@
           class:analysis={entry.kind === 'analysis'}
           style="color:{palette.text}; border-left-color:{palette.border}; background:{palette.background}"
         >
-          {entry.text}
+          {@html formatInlineMarkdown(entry.text)}
         </div>
       {/each}
 
@@ -109,7 +110,7 @@
           class="entry narration streaming"
           style="color:{narrationPalette.text}; border-left-color:{narrationPalette.border}; background:{narrationPalette.background}"
         >
-          {llmState.currentNarration}<span class="cursor">|</span>
+          {@html formatInlineMarkdown(llmState.currentNarration)}<span class="cursor">|</span>
         </div>
       {/if}
 
@@ -118,7 +119,7 @@
           class="entry analysis streaming"
           style="color:{analysisPalette.text}; border-left-color:{analysisPalette.border}; background:{analysisPalette.background}"
         >
-          {llmState.analysisResult}<span class="cursor">|</span>
+          {@html formatInlineMarkdown(llmState.analysisResult)}<span class="cursor">|</span>
         </div>
       {/if}
     {/if}
@@ -201,6 +202,11 @@
   .entry.narration {
     font-style: italic;
     border-left: 2px solid;
+  }
+
+  /* Italic emphasis within already-italic narration: revert to upright so it stands out */
+  .entry.narration :global(em) {
+    font-style: normal;
   }
 
   .entry.analysis {
