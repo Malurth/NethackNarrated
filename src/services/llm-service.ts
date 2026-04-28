@@ -208,6 +208,9 @@ export interface SeenRegistryData {
   items: string[];
   /** Feature position keys (e.g. "dlvl1:staircase up@46,16") ever seen. */
   features: string[];
+  /** Item renames keyed by o_id → previous name(s), oldest first. Tracks
+   *  identification history so diff lines can annotate "previously X". */
+  itemRenames?: Record<number, string[]>;
 }
 
 export class SeenRegistry {
@@ -215,6 +218,9 @@ export class SeenRegistry {
   private _monsterSpecies = new Set<string>();
   private _items = new Set<string>();
   private _features = new Set<string>();
+  /** o_id → list of previous names (oldest first). Records every name
+   *  change so diff lines can say "(previously "weapon")". */
+  private _itemRenames = new Map<number, string[]>();
 
   /** Register a monster as seen. Returns true if this is the first time. */
   seeMonster(m_id: number | undefined, name: string): boolean {
@@ -266,6 +272,22 @@ export class SeenRegistry {
     return true;
   }
 
+  /** Record that an item with the given o_id changed its display name.
+   *  `oldName` is appended to the rename history so later diff lines can
+   *  say "(previously "weapon")". */
+  recordRename(o_id: number, oldName: string): void {
+    if (!o_id) return;
+    const list = this._itemRenames.get(o_id);
+    if (list) list.push(oldName);
+    else this._itemRenames.set(o_id, [oldName]);
+  }
+
+  /** Get all previous names for an item (oldest first), or empty array. */
+  getPreviousNames(o_id: number | undefined): string[] {
+    if (!o_id) return [];
+    return this._itemRenames.get(o_id) ?? [];
+  }
+
   /** Create a shallow clone (for snapshotting before per-turn diffs). */
   clone(): SeenRegistry {
     return SeenRegistry.fromJSON(this.toJSON());
@@ -273,11 +295,16 @@ export class SeenRegistry {
 
   /** Serialize for persistence. */
   toJSON(): SeenRegistryData {
+    const renames: Record<number, string[]> = {};
+    for (const [oid, names] of this._itemRenames) {
+      renames[oid] = names;
+    }
     return {
       monsterIds: [...this._monsterIds],
       monsterSpecies: [...this._monsterSpecies],
       items: [...this._items],
       features: [...this._features],
+      itemRenames: renames,
     };
   }
 
@@ -288,6 +315,11 @@ export class SeenRegistry {
     for (const sp of data.monsterSpecies ?? []) reg._monsterSpecies.add(sp);
     for (const it of data.items ?? []) reg._items.add(it);
     for (const ft of data.features ?? []) reg._features.add(ft);
+    if (data.itemRenames) {
+      for (const [oid, names] of Object.entries(data.itemRenames)) {
+        reg._itemRenames.set(Number(oid), names);
+      }
+    }
     return reg;
   }
 }
@@ -760,6 +792,14 @@ function diffPetsAcrossLevelChange(
   }
 }
 
+/** Build a "(previously "X")" suffix if the item has been renamed, or "". */
+function previousNameSuffix(o_id: number | undefined): string {
+  const prev = seenRegistry.getPreviousNames(o_id);
+  if (prev.length === 0) return '';
+  // Use the most recent previous name — that's what the LLM last narrated
+  return ` (previously "${prev[prev.length - 1]}")`;
+}
+
 /**
  * Check if a previously-visible item is now obscured (not gone) in the full
  * entity list. Returns a descriptive line if obscured, or null if truly gone.
@@ -779,19 +819,56 @@ function describeObscuredItem(
     : allItems.find(e => e.x === item.x && e.y === item.y && (e.name || e.category) === item.name);
   if (!match) return null;
 
+  const prevSuffix = previousNameSuffix(item.o_id ?? match.o_id);
+
   // It's obscured — figure out what's on top
   if (match.x === px && match.y === py) {
-    return `The ${item.name} is now underfoot`;
+    return `The ${item.name} is now underfoot${prevSuffix}`;
   }
   // Check for a monster on top
   const monsterOnTop = state.entities.find(
     e => e.type === 'monster' && e.x === match.x && e.y === match.y
   );
   if (monsterOnTop) {
-    return `The ${item.name} is hidden beneath ${monsterOnTop.name} (${describeRelativePos(px, py, match.x, match.y)})`;
+    return `The ${item.name} is hidden beneath ${monsterOnTop.name} (${describeRelativePos(px, py, match.x, match.y)})${prevSuffix}`;
   }
   // Generic obscured (item pile or unknown)
-  return `The ${item.name} is obscured (${describeRelativePos(px, py, match.x, match.y)})`;
+  return `The ${item.name} is obscured (${describeRelativePos(px, py, match.x, match.y)})${prevSuffix}`;
+}
+
+/** Synthesize discovery events for the initial game state (turn 1) where
+ *  there's no previous snapshot to diff against. Registers all visible
+ *  entities in seenRegistry and returns diff-style lines so the opening
+ *  narration's header records what was present at game start. */
+export function synthesizeInitialEvents(state: GameState): string[] {
+  const px = state.player.x;
+  const py = state.player.y;
+  const lines: string[] = [];
+
+  for (const pet of visiblePets(state)) {
+    seenRegistry.seeMonster(pet.m_id, pet.name);
+    lines.push(`Your pet ${pet.name} is here (${describeRelativePos(px, py, pet.x, pet.y)})`);
+  }
+
+  for (const mon of visibleMonsters(state)) {
+    seenRegistry.seeMonster(mon.m_id, mon.name);
+    lines.push(`A ${mon.name} is here for the first time (${describeRelativePos(px, py, mon.x, mon.y)})`);
+  }
+
+  for (const item of visibleNarrationItems(state)) {
+    const name = itemDisplayName(item, uiState.itemDetailMode);
+    seenRegistry.seeItem(name, item.x, item.y, state.dlvl);
+    lines.push(`Discovered ${name} (${describeRelativePos(px, py, item.x, item.y)}) [new]`);
+  }
+
+  const features = state.terrain?.features ?? [];
+  for (const f of features) {
+    const key = `${f.name}@${f.x},${f.y}`;
+    seenRegistry.seeFeature(key, state.dlvl);
+    lines.push(`Discovered ${f.name} (${describeRelativePos(px, py, f.x, f.y)}) [new]`);
+  }
+
+  return lines;
 }
 
 export function computeDiff(prev: NarrationSnapshot, state: GameState, { registryOverride }: { registryOverride?: SeenRegistry } = {}): string[] {
@@ -980,6 +1057,7 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
       if (prevItem) {
         if (prevItem.name !== currItem.name) {
           lines.push(`Identified: the ${prevItem.name} is actually ${currItem.name} (${describeRelativePos(px, py, currItem.x, currItem.y)})`);
+          if (!readOnly) seenRegistry.recordRename(oid, prevItem.name);
         }
         // Matched — remove from prev so it's not reported as "gone"
         prevById.delete(oid);
@@ -1030,6 +1108,7 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
       if (prevKey === currKey) continue; // same name — handled by key matching
       // Different name at same position, old had no o_id → identification
       lines.push(`Identified: the ${prevItem.name} is actually ${currItem.name} (${describeRelativePos(px, py, currItem.x, currItem.y)})`);
+      if (!readOnly && currItem.o_id) seenRegistry.recordRename(currItem.o_id, prevItem.name);
       identifiedPrevKeys.add(prevKey);
       identifiedCurrKeys.add(currKey);
     }
@@ -1040,9 +1119,10 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
         const firstTime = readOnly
           ? !reg.hasSeenItem(item.name, item.x, item.y, current.dlvl)
           : seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
+        const prevSuffix = previousNameSuffix(item.o_id);
         lines.push(firstTime
           ? `Discovered ${item.name} (${describeRelativePos(px, py, item.x, item.y)}) [new]`
-          : `${item.name} visible again (${describeRelativePos(px, py, item.x, item.y)})`);
+          : `${item.name} visible again (${describeRelativePos(px, py, item.x, item.y)})${prevSuffix}`);
       }
     }
     // Register all currently visible items
@@ -1301,7 +1381,8 @@ export function buildSystemInstructions(isGameStart: boolean): string {
 - Do NOT use bullet lists, numbered lists, or block quotes.
 - Do NOT use horizontal rules (---) or section breaks of any kind.
 - Light *italic* or **bold** for in-line emphasis is acceptable but optional.
-- Output ONLY the prose narration itself — start directly with the first sentence, no preamble.`;
+- Output ONLY the prose narration itself — start directly with the first sentence, no preamble.
+- The game data uses "tiles" as a distance unit. In your prose, call these "paces" instead.`;
 
   if (isGameStart) {
     return `You are a dramatic narrator for a game of NetHack, the classic roguelike dungeon crawler. Always use second person ("you") to refer to the player.
@@ -1320,6 +1401,8 @@ ONLY describe things present in the data below. Do NOT invent creatures, charact
 The RECENT NARRATION HISTORY section shows your prior narrations in this adventure; use them to maintain tonal continuity and avoid redundancy.
 The CURRENT STATE section is authoritative for things like equipment, active effects (flying, hungry, cursed, etc.), and what's visible to you right now — trust it over anything remembered from older narrations.
 In the WHAT CHANGED section, entities marked "for the first time" or "[new]" have NEVER been seen before in this adventure — narrate them as genuine first encounters. Entities marked "reappeared" or "visible again" HAVE been seen previously — acknowledge them briefly or skip them in favor of more narratively interesting events. Prioritize: (a) major player actions and their direct results, (b) room/level transitions and new environments, (c) first-time discoveries. Distant passive creatures are low priority unless they pose immediate threat.
+When WHAT CHANGED says "Identified: the X is actually Y", this means an item previously known only as "X" has been revealed to be "Y". Narrate this as recognition or realization — connect it back to your earlier mention of "X", do NOT treat "Y" as a brand-new discovery. Similarly, items annotated with (previously "X") are the SAME item you already narrated about under the name "X" — refer back to the earlier mention naturally.
+Each narration history entry may include an "Events:" line listing the structured events that entry covered. Use these to check what you already narrated about — if an item, creature, or event appears in a past entry's Events line, do not re-introduce it as if new.
 
 ${formattingRules}`;
 }
@@ -1347,11 +1430,16 @@ export function formatNarrationHistoryEntry(entry: LLMEntry): string {
   } else {
     prefix = `[T${entry.turn}]`;
   }
+  // Events line — condensed structured summary of what this narration covered
+  const eventsLine = h?.events && h.events.length > 0
+    ? `\nEvents: ${h.events.join('; ')}`
+    : '';
+
   // Narration text can span multiple lines; indent with "> " so the
   // LLM reads it as a distinct block rather than as continuation of
   // the header line.
   const quoted = entry.text.split('\n').map(l => `> ${l}`).join('\n');
-  return `${prefix}\n${quoted}`;
+  return `${prefix}${eventsLine}\n${quoted}`;
 }
 
 /** Build the RECENT NARRATION HISTORY block from the entries list.
@@ -1467,10 +1555,48 @@ export function buildThisTurnBlock(
   return `THIS TURN\n${turnLogSection}${aggregatedSection}${messagesSection}`;
 }
 
+/** Condense an aggregated diff into a compact event summary for storage
+ *  in narration history. Keeps only narratively significant lines —
+ *  discoveries, identifications, pickups, combat, level changes, status
+ *  changes — and drops mundane position/movement lines. */
+export function condenseDiffToEvents(diff: string[]): string[] {
+  const events: string[] = [];
+  for (const line of diff) {
+    // Keep: discoveries, identifications, inventory changes, combat,
+    // level changes, status/condition changes, room transitions
+    if (/^Discovered /.test(line)
+      || /^Identified: /.test(line)
+      || /^Gained inventory /.test(line)
+      || /^Lost inventory /.test(line)
+      || /^Inventory /.test(line)
+      || /is now underfoot/.test(line)
+      || /is now obscured/.test(line)
+      || /is hidden beneath/.test(line)
+      || /is no longer on the floor/.test(line)
+      || /is no longer visible/.test(line)
+      || /^(Gained|Lost) \d+ HP/.test(line)
+      || /^(Gained|Lost) \d+ power/.test(line)
+      || /^(Ascended|Descended) /.test(line)
+      || /^Now /.test(line)
+      || /^No longer /.test(line)
+      || /^Hunger: /.test(line)
+      || /^Entered /.test(line)
+      || /^A .+ (is here for the first time|reappeared)/.test(line)
+      || /^Your pet .+ (appeared|followed|did not follow|is no longer)/.test(line)
+      || /^The .+ (moved closer|moved away|shifted)/.test(line)
+    ) {
+      events.push(line);
+    }
+  }
+  return events;
+}
+
 /** Capture the narration header for an entry at the moment it's about
  *  to be stored. Reads live action context from `gameState` to describe
- *  the triggering action; the rest comes from the passed state. */
-export function captureNarrationHeader(state: GameState): NarrationHeader {
+ *  the triggering action; the rest comes from the passed state.
+ *  `aggregatedDiff` is condensed into an event summary for history. */
+export function captureNarrationHeader(state: GameState, aggregatedDiff?: string[]): NarrationHeader {
+  const events = aggregatedDiff ? condenseDiffToEvents(aggregatedDiff) : [];
   return {
     dlvl: state.dlvl,
     hp: state.player.hp,
@@ -1478,6 +1604,7 @@ export function captureNarrationHeader(state: GameState): NarrationHeader {
     conditions: [...state.conditions],
     properties: [...state.properties],
     action: describeActionContext(state.player.x, state.player.y),
+    ...(events.length > 0 ? { events } : {}),
   };
 }
 
@@ -1635,7 +1762,7 @@ export async function narrate(state: GameState, log: TurnRecord[] = [], aggregat
         turn: state.turn,
         text: fullText,
         timestamp: Date.now(),
-        header: captureNarrationHeader(state),
+        header: captureNarrationHeader(state, aggregatedDiff),
       },
     ];
   } catch (err: any) {
@@ -1722,7 +1849,7 @@ async function runNarrationLoop(): Promise<void> {
       turnLog = [];
       const aggregatedDiff = lastNarrationSnapshot
         ? computeDiff(lastNarrationSnapshot, state, { registryOverride: lastNarrationRegistrySnapshot ?? undefined })
-        : [];
+        : synthesizeInitialEvents(state);
       lastNarrationSnapshot = captureSnapshot(state);
       lastNarrationRegistrySnapshot = seenRegistry.clone();
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { hasNarratableContent, filterMessages, describeAction, computeDiff, captureSnapshot, narrate, analyze, resetNarrationState, maybeNarrate, buildMiniMap, saveNarrationStateForSlot, loadNarrationStateForSlot, clearNarrationStateForSlot, formatNarrationHistoryEntry, formatNarrationHistory, buildCurrentStateBlock, buildThisTurnBlock, buildSystemInstructions, NARRATION_HISTORY_LIMIT, getNarrationQueueState, resetNarrationQueue, friendlyConditionName, friendlyConditionList, friendlyPropertyName, friendlyPropertyList, SeenRegistry, seenRegistry } from './llm-service';
+import { hasNarratableContent, filterMessages, describeAction, computeDiff, captureSnapshot, narrate, analyze, resetNarrationState, maybeNarrate, buildMiniMap, saveNarrationStateForSlot, loadNarrationStateForSlot, clearNarrationStateForSlot, formatNarrationHistoryEntry, formatNarrationHistory, buildCurrentStateBlock, buildThisTurnBlock, buildSystemInstructions, NARRATION_HISTORY_LIMIT, getNarrationQueueState, resetNarrationQueue, friendlyConditionName, friendlyConditionList, friendlyPropertyName, friendlyPropertyList, SeenRegistry, seenRegistry, condenseDiffToEvents, captureNarrationHeader, synthesizeInitialEvents } from './llm-service';
 import { gameState } from '../state/game.svelte';
 import { llmState } from '../state/llm.svelte';
 import type { GameState, MonsterEntity } from '../types/game';
@@ -2805,5 +2805,303 @@ describe('analyze', () => {
 
     const prompt = getLoggedPrompt();
     expect(prompt).not.toContain('currently prompting');
+  });
+});
+
+describe('SeenRegistry — item renames', () => {
+  it('records and retrieves previous names for an item by o_id', () => {
+    const reg = new SeenRegistry();
+    reg.recordRename(47, 'weapon');
+    expect(reg.getPreviousNames(47)).toEqual(['weapon']);
+  });
+
+  it('accumulates multiple renames in order', () => {
+    const reg = new SeenRegistry();
+    reg.recordRename(47, 'weapon');
+    reg.recordRename(47, '10 orcish arrows');
+    expect(reg.getPreviousNames(47)).toEqual(['weapon', '10 orcish arrows']);
+  });
+
+  it('returns empty array for unknown o_id', () => {
+    const reg = new SeenRegistry();
+    expect(reg.getPreviousNames(99)).toEqual([]);
+  });
+
+  it('ignores o_id 0', () => {
+    const reg = new SeenRegistry();
+    reg.recordRename(0, 'weapon');
+    expect(reg.getPreviousNames(0)).toEqual([]);
+  });
+
+  it('returns empty array for undefined o_id', () => {
+    const reg = new SeenRegistry();
+    expect(reg.getPreviousNames(undefined)).toEqual([]);
+  });
+
+  it('round-trips renames through JSON serialization', () => {
+    const reg = new SeenRegistry();
+    reg.recordRename(47, 'weapon');
+    reg.recordRename(47, 'tool');
+    reg.recordRename(99, 'gold');
+
+    const restored = SeenRegistry.fromJSON(reg.toJSON());
+    expect(restored.getPreviousNames(47)).toEqual(['weapon', 'tool']);
+    expect(restored.getPreviousNames(99)).toEqual(['gold']);
+    expect(restored.getPreviousNames(1)).toEqual([]);
+  });
+});
+
+describe('computeDiff — rename annotations on diff lines', () => {
+  beforeEach(() => {
+    resetNarrationState();
+  });
+
+  it('annotates "underfoot" with previous name after identification', () => {
+    // Turn 1: item visible as "weapon" (glyph-only, o_id=0)
+    const s1 = makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'weapon', category: 'weapon', x: 15, y: 10, char: ')', color: 0 },
+      ],
+    });
+    const snap1 = captureSnapshot(s1);
+
+    // Turn 2: item identified as "10 orcish arrows" (now has o_id)
+    const s2 = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: '10 orcish arrows', category: 'weapon', x: 15, y: 10, char: ')', color: 0, o_id: 47 },
+      ],
+    });
+    const diff1 = computeDiff(snap1, s2);
+    expect(diff1.some(l => l.includes('Identified'))).toBe(true);
+
+    // Turn 3: player steps on the arrows — item becomes obscured
+    const snap2 = captureSnapshot(s2);
+    const s3 = makeState({
+      turn: 3,
+      player: { x: 15, y: 10, hp: 16, max_hp: 16, pw: 4, max_pw: 4, ac: 10, str: 16, dex: 12, con: 16, int: 8, wis: 8, cha: 8, xp: 0, xp_level: 1, gold: 0, hunger: 'normal', score: 0, turn: 3, dlvl: 1 },
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: '10 orcish arrows', category: 'weapon', x: 15, y: 10, char: ')', color: 0, o_id: 47, obscured: true },
+      ],
+    });
+    const diff2 = computeDiff(snap2, s3);
+    expect(diff2).toContain('The 10 orcish arrows is now underfoot (previously "weapon")');
+  });
+
+  it('annotates "visible again" with previous name after identification', () => {
+    // Turn 1: item visible as "tool"
+    const s1 = makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'tool', category: 'tool', x: 15, y: 10, char: '(', color: 0 },
+      ],
+    });
+    const snap1 = captureSnapshot(s1);
+
+    // Turn 2: identified as "large box"
+    const s2 = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 50 },
+      ],
+    });
+    computeDiff(snap1, s2);
+    const snap2 = captureSnapshot(s2);
+
+    // Turn 3: box goes out of sight
+    const s3 = makeState({ turn: 3, terrain: makeTerrain(), entities: [] });
+    computeDiff(snap2, s3);
+    const snap3 = captureSnapshot(s3);
+
+    // Turn 4: box visible again
+    const s4 = makeState({
+      turn: 4,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 50 },
+      ],
+    });
+    const diff = computeDiff(snap3, s4);
+    expect(diff).toContain('large box visible again (5 tiles east) (previously "tool")');
+  });
+
+  it('records rename on o_id-matched identification', () => {
+    const s1 = makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a scroll labeled ZELGO MER', category: 'scroll', x: 15, y: 10, char: '?', color: 0, o_id: 47 },
+      ],
+    });
+    const snap1 = captureSnapshot(s1);
+    const s2 = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a scroll of identify', category: 'scroll', x: 15, y: 10, char: '?', color: 0, o_id: 47 },
+      ],
+    });
+    computeDiff(snap1, s2);
+    expect(seenRegistry.getPreviousNames(47)).toEqual(['a scroll labeled ZELGO MER']);
+  });
+});
+
+describe('condenseDiffToEvents', () => {
+  it('keeps discovery, identification, and inventory lines', () => {
+    const diff = [
+      'Turn advanced',
+      'Moved north-east',
+      'Discovered gold (2 tiles east) [new]',
+      'Identified: the weapon is actually 10 orcish arrows (3 tiles north-east)',
+      'Gained inventory a: 10 orcish arrows',
+      'The 2 gold pieces is now underfoot (previously "gold")',
+    ];
+    const events = condenseDiffToEvents(diff);
+    expect(events).toContain('Discovered gold (2 tiles east) [new]');
+    expect(events).toContain('Identified: the weapon is actually 10 orcish arrows (3 tiles north-east)');
+    expect(events).toContain('Gained inventory a: 10 orcish arrows');
+    expect(events).toContain('The 2 gold pieces is now underfoot (previously "gold")');
+    expect(events).not.toContain('Turn advanced');
+    expect(events).not.toContain('Moved north-east');
+  });
+
+  it('keeps combat, level change, and status lines', () => {
+    const diff = [
+      'Descended to dungeon level 2',
+      'Lost 5 HP (now 11/16)',
+      'Now confused',
+      'No longer blind',
+      'Entered a lit room (8x5)',
+      'A goblin is here for the first time (3 tiles east)',
+    ];
+    const events = condenseDiffToEvents(diff);
+    expect(events).toHaveLength(6);
+  });
+
+  it('returns empty array for movement-only diffs', () => {
+    const diff = ['Turn advanced', 'Moved east'];
+    expect(condenseDiffToEvents(diff)).toEqual([]);
+  });
+});
+
+describe('formatNarrationHistoryEntry — events line', () => {
+  it('includes events line when header has events', () => {
+    const entry: LLMEntry = {
+      kind: 'narration',
+      turn: 15,
+      text: 'You claim the gold.',
+      timestamp: 0,
+      header: {
+        dlvl: 1, hp: 15, maxHp: 15, conditions: [], properties: [],
+        action: 'move east',
+        events: ['Identified: the gold is actually 2 gold pieces', 'Gained inventory: 2 gold pieces'],
+      },
+    };
+    const out = formatNarrationHistoryEntry(entry);
+    expect(out).toContain('Events: Identified: the gold is actually 2 gold pieces; Gained inventory: 2 gold pieces');
+    expect(out).toContain('> You claim the gold.');
+  });
+
+  it('omits events line when header has no events', () => {
+    const entry: LLMEntry = {
+      kind: 'narration',
+      turn: 10,
+      text: 'You walk north.',
+      timestamp: 0,
+      header: { dlvl: 1, hp: 15, maxHp: 15, conditions: [], properties: [], action: 'move north' },
+    };
+    const out = formatNarrationHistoryEntry(entry);
+    expect(out).not.toContain('Events:');
+  });
+
+  it('omits events line for legacy entries without header', () => {
+    const entry: LLMEntry = {
+      kind: 'narration',
+      turn: 5,
+      text: 'Legacy text.',
+      timestamp: 0,
+    };
+    const out = formatNarrationHistoryEntry(entry);
+    expect(out).not.toContain('Events:');
+  });
+});
+
+describe('captureNarrationHeader — events from aggregated diff', () => {
+  it('stores condensed events from aggregated diff', () => {
+    const state = makeState({ turn: 15 });
+    const diff = [
+      '4 turns advanced',
+      'Moved north-east',
+      'Identified: the weapon is actually 10 orcish arrows (2 tiles north-east)',
+      'Discovered doorway (4 tiles south-west) [new]',
+    ];
+    const header = captureNarrationHeader(state, diff);
+    expect(header.events).toContain('Identified: the weapon is actually 10 orcish arrows (2 tiles north-east)');
+    expect(header.events).toContain('Discovered doorway (4 tiles south-west) [new]');
+    expect(header.events).not.toContain('4 turns advanced');
+    expect(header.events).not.toContain('Moved north-east');
+  });
+
+  it('omits events field when diff has no notable events', () => {
+    const state = makeState({ turn: 5 });
+    const header = captureNarrationHeader(state, ['Turn advanced', 'Moved east']);
+    expect(header.events).toBeUndefined();
+  });
+
+  it('omits events field when no diff provided', () => {
+    const state = makeState({ turn: 5 });
+    const header = captureNarrationHeader(state);
+    expect(header.events).toBeUndefined();
+  });
+});
+
+describe('synthesizeInitialEvents', () => {
+  beforeEach(() => {
+    resetNarrationState();
+  });
+
+  it('generates discovery lines for visible items, pets, and features', () => {
+    const state = makeState({
+      terrain: makeTerrain({
+        features: [{ name: 'staircase up', x: 9, y: 10, inSight: true }],
+      }),
+      entities: [
+        { type: 'monster', name: 'little dog', x: 9, y: 11, char: 'd', color: 0, pet: true, m_id: 5 },
+        { type: 'item', name: 'a small shield', category: 'armor', x: 12, y: 10, char: '[', color: 0, o_id: 10 },
+      ],
+    });
+    const events = synthesizeInitialEvents(state);
+    expect(events).toContain('Your pet little dog is here (adjacent south-west)');
+    expect(events).toContain('Discovered a small shield (2 tiles east) [new]');
+    expect(events).toContain('Discovered staircase up (adjacent west) [new]');
+  });
+
+  it('registers items in seenRegistry so subsequent diffs know about them', () => {
+    const state = makeState({
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a small shield', category: 'armor', x: 12, y: 10, char: '[', color: 0, o_id: 10 },
+      ],
+    });
+    synthesizeInitialEvents(state);
+    // Item should now be registered — seeItem returns false for already-seen
+    expect(seenRegistry.seeItem('a small shield', 12, 10, 1)).toBe(false);
+  });
+
+  it('registers pets in seenRegistry', () => {
+    const state = makeState({
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'monster', name: 'little dog', x: 9, y: 11, char: 'd', color: 0, pet: true, m_id: 5 },
+      ],
+    });
+    synthesizeInitialEvents(state);
+    expect(seenRegistry.hasSeenMonster(5, 'little dog')).toBe(true);
   });
 });

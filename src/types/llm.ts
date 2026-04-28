@@ -20,4 +20,9 @@ export interface NarrationHeader {
   conditions: string[];
   properties: string[];
   action: string;
+  /** Condensed summary of notable events covered by this narration
+   *  (discoveries, identifications, pickups, combat, etc.). Rendered
+   *  between the header line and the prose in the narration history so
+   *  the LLM has structured memory of what it already narrated about. */
+  events?: string[];
 }
