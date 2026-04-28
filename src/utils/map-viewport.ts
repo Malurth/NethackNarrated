@@ -68,7 +68,10 @@ export function clampPan(
  */
 export function computeMinZoom(b: ViewportBounds): number {
   if (b.mw === 0 || b.mh === 0) return 1;
-  return Math.min(b.cw / b.mw, b.ch / b.mh);
+  // Fit the entire map in the container, but never force a zoom floor
+  // above 1× — small maps shouldn't prevent the user from zooming out
+  // to a comfortable overview.
+  return Math.min(1, b.cw / b.mw, b.ch / b.mh);
 }
 
 /**

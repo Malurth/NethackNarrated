@@ -10,25 +10,31 @@ import {
 
 // Standard test container: 800x600. Map: 400x200 natural size.
 // Width-tight fit zoom = 800/400 = 2. Height-tight fit zoom = 600/200 = 3.
-// minZoom = min(2, 3) = 2 (width is the tight axis).
+// computeMinZoom caps at 1 (map smaller than container at 1×).
+// At zoom = 1: scaled map is 400x200 — centered in both axes.
 // At zoom = 2: scaled map is 800x400 — exactly fills width, 200px dead
 // space total on height (100 top, 100 bottom).
 // At zoom = 3: scaled map is 1200x600 — exceeds width, exactly fills height.
 const B: ViewportBounds = { cw: 800, ch: 600, mw: 400, mh: 200 };
 
 describe('computeMinZoom', () => {
-  it('returns the tighter-axis fit ratio', () => {
-    expect(computeMinZoom(B)).toBe(2); // width-tight
+  it('caps at 1 when fit ratio exceeds 1 (small map in large container)', () => {
+    // Width ratio = 2, height ratio = 3 → fit = 2, capped to 1.
+    expect(computeMinZoom(B)).toBe(1);
   });
 
-  it('handles height-tight maps', () => {
+  it('returns fit ratio when it is below 1 (large map in small container)', () => {
     // Tall map: 200 wide, 800 tall. Width ratio = 4, height ratio = 0.75.
-    // Tight axis is height → min(4, 0.75) = 0.75.
+    // Tight axis is height → min(1, 4, 0.75) = 0.75.
     expect(computeMinZoom({ cw: 800, ch: 600, mw: 200, mh: 800 })).toBe(0.75);
   });
 
   it('returns 1 for zero-sized maps to avoid NaN/Infinity', () => {
     expect(computeMinZoom({ cw: 800, ch: 600, mw: 0, mh: 0 })).toBe(1);
+  });
+
+  it('returns 1 when map exactly fits container', () => {
+    expect(computeMinZoom({ cw: 800, ch: 600, mw: 800, mh: 600 })).toBe(1);
   });
 });
 
@@ -137,9 +143,9 @@ describe('clampPan', () => {
 });
 
 describe('applyWheelZoom', () => {
-  const minZoom = 2;
+  const minZoom = 1;
   const maxZoom = 5;
-  const startCentered = { zoom: 2, panX: 0, panY: 100 };
+  const startCentered = { zoom: 1, panX: 200, panY: 200 };
 
   it('zooms in on wheel-up (negative deltaY)', () => {
     const v = applyWheelZoom(startCentered, { x: 400, y: 300 }, -100, B, minZoom, maxZoom);
@@ -221,27 +227,28 @@ describe('applyWheelZoom', () => {
 describe('reconcileViewport', () => {
   it('initializes uninitialized viewport (zoom === 0) to minZoom centered', () => {
     const r = reconcileViewport({ zoom: 0, panX: 0, panY: 0 }, B);
-    expect(r.minZoom).toBe(2);
-    expect(r.viewport.zoom).toBe(2);
-    // At minZoom the tight axis is locked at 0 and loose axis is centered.
-    expect(r.viewport.panX).toBe(0);
-    expect(r.viewport.panY).toBe(100);
+    expect(r.minZoom).toBe(1);
+    expect(r.viewport.zoom).toBe(1);
+    // At zoom 1 both axes are smaller than container → both centered.
+    expect(r.viewport.panX).toBe((800 - 400) / 2); // 200
+    expect(r.viewport.panY).toBe((600 - 200) / 2); // 200
   });
 
   it('preserves user zoom on map update when still >= new minZoom', () => {
-    // User zoomed in to 3.5; map grows such that new minZoom is 2.5.
+    // User zoomed in to 3.5; map grows such that new minZoom is 0.8.
     // User's chosen zoom is preserved.
-    const newB: ViewportBounds = { cw: 800, ch: 600, mw: 320, mh: 200 }; // minZoom = 2.5
+    const newB: ViewportBounds = { cw: 800, ch: 600, mw: 1000, mh: 600 }; // minZoom = min(1, 0.8, 1) = 0.8
     const r = reconcileViewport({ zoom: 3.5, panX: -100, panY: -50 }, newB);
-    expect(r.minZoom).toBe(2.5);
+    expect(r.minZoom).toBe(0.8);
     expect(r.viewport.zoom).toBe(3.5);
   });
 
   it('bumps zoom up to new minZoom if user zoom dropped below the new fit', () => {
-    // User was at 1.2 (say, from an older state). New map's minZoom is 2.
-    // Bump zoom up; never allow zoom below fit.
-    const r = reconcileViewport({ zoom: 1.2, panX: 0, panY: 0 }, B);
-    expect(r.viewport.zoom).toBe(2);
+    // Large map: minZoom = min(1, 800/1600, 600/800) = 0.5.
+    // User was at 0.3. Bump up to 0.5.
+    const bigB: ViewportBounds = { cw: 800, ch: 600, mw: 1600, mh: 800 };
+    const r = reconcileViewport({ zoom: 0.3, panX: 0, panY: 0 }, bigB);
+    expect(r.viewport.zoom).toBe(0.5);
   });
 
   it('re-clamps pan to new bounds', () => {
@@ -259,9 +266,10 @@ describe('reconcileViewport', () => {
   });
 
   it('passes padding through to clampPan', () => {
-    // At zoom 2, scaled map is 800x400. Without padding, panX locked at 0.
-    // With padding 50, panX range is [-50, 50].
-    const r = reconcileViewport({ zoom: 2, panX: 30, panY: 0 }, B, 50);
+    // Large map at zoom 2: scaled 1600x1200. Without padding, panX range [-800, 0].
+    // With padding 50: panX range [-850, 50].
+    const bigB: ViewportBounds = { cw: 800, ch: 600, mw: 800, mh: 600 };
+    const r = reconcileViewport({ zoom: 2, panX: 30, panY: 0 }, bigB, 50);
     expect(r.viewport.panX).toBe(30); // within padded range
   });
 });
