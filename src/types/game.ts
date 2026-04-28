@@ -47,6 +47,14 @@ export interface ItemEntity {
   name?: string;
   obscured?: boolean;
   remembered?: boolean;
+  /** Unique object identity from the C engine (never reused within a game
+   *  session). Use to track item identity across turns even when the display
+   *  name changes (e.g. "a weapon" → "11 arrows"). 0 or undefined for
+   *  remembered items and glyph-only entries. */
+  o_id?: number;
+  /** True if the player has examined this item up close (at their feet or
+   *  in inventory). */
+  dknown?: boolean;
 }
 
 export type Entity = MonsterEntity | ItemEntity;

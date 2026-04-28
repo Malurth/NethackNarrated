@@ -683,6 +683,90 @@ describe('computeDiff — item and feature discovery', () => {
     expect(diff.filter(l => l === 'Discovered fountain (6 tiles west) [new]')).toHaveLength(1);
     expect(diff.join('\n')).not.toContain('on the floor');
   });
+
+  it('emits "Identified" when an item with the same o_id changes name', () => {
+    // Item name changes (e.g. scroll identification, or name update) — same o_id
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a scroll labeled ZELGO MER', category: 'scroll', x: 15, y: 10, char: '?', color: 0, o_id: 47 },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a scroll of identify', category: 'scroll', x: 15, y: 10, char: '?', color: 0, o_id: 47 },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('Identified: the a scroll labeled ZELGO MER is actually a scroll of identify (5 tiles east)');
+    expect(diff.join('\n')).not.toContain('no longer on the floor');
+    expect(diff.join('\n')).not.toContain('Discovered');
+  });
+
+  it('does not emit "Identified" when o_id matches and name is unchanged', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47 },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47 },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff.join('\n')).not.toContain('Identified');
+    expect(diff.join('\n')).not.toContain('box');
+  });
+
+  it('reports genuine item replacement when o_ids differ at the same position', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'tool', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47 },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'chest', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 99 },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    // Different o_ids → genuinely different objects
+    expect(diff.join('\n')).not.toContain('Identified');
+    expect(diff).toContain('The tool is no longer on the floor nearby');
+    expect(diff.some(l => l.includes('chest') && l.includes('Discovered'))).toBe(true);
+  });
+
+  it('falls back to name@position matching for items without o_id', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'gold', category: 'gold', x: 7, y: 13, char: '$', color: 0 },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'gold', category: 'gold', x: 7, y: 13, char: '$', color: 0 },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    // Same name@position, no o_id — should not report anything about gold
+    expect(diff.join('\n')).not.toContain('gold');
+  });
 });
 
 describe('SeenRegistry', () => {
@@ -1759,9 +1843,10 @@ describe('buildSystemInstructions', () => {
     expect(out).toContain('Amulet of Yendor');
   });
 
-  it('regular variant asks for 1-3 vivid sentences', () => {
+  it('regular variant asks for concise narration and continuity', () => {
     const out = buildSystemInstructions(false);
-    expect(out).toContain('1-3 vivid sentences');
+    expect(out).toContain('1-2 sentences');
+    expect(out).toContain('continuous, unfolding story');
     expect(out).toContain('CURRENT STATE');
     expect(out).toContain('RECENT NARRATION HISTORY');
   });

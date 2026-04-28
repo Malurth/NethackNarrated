@@ -25,7 +25,7 @@
       // Skip obscured items — the player hasn't actually seen them yet
       if (e.type === 'item' && (e as ItemEntity).obscured) continue;
 
-      const name = e.type === 'monster' ? e.name : (e as any).category ?? 'item';
+      const name = e.type === 'monster' ? e.name : ((e as any).name || (e as any).category || 'item');
       const remembered = e.type === 'item' && !!(e as ItemEntity).remembered;
       const key = `${e.char}-${name}`;
       const mapKey = `${key}${remembered ? '-rem' : ''}`;

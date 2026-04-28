@@ -183,7 +183,7 @@ interface NarrationSnapshot {
   warnedMonsters: string[];
   monsters: { name: string; x: number; y: number; m_id?: number }[];
   pets: { name: string; x: number; y: number; m_id?: number }[];
-  items: { name: string; x: number; y: number }[];
+  items: { name: string; x: number; y: number; o_id?: number; dknown?: boolean }[];
   inventory: { letter: string; text: string }[];
   playerRoomNo: number | null;
   playerInCorridor: boolean;
@@ -632,7 +632,7 @@ export function captureSnapshot(state: GameState): NarrationSnapshot {
     warnedMonsters: [...state.warnedMonsters],
     monsters: visibleMonsters(state).map(e => ({ name: e.name, x: e.x, y: e.y, ...(e.m_id ? { m_id: e.m_id } : {}) })),
     pets: visiblePets(state).map(e => ({ name: e.name, x: e.x, y: e.y, ...(e.m_id ? { m_id: e.m_id } : {}) })),
-    items: visibleNarrationItems(state).map(e => ({ name: e.name || e.category, x: e.x, y: e.y })),
+    items: visibleNarrationItems(state).map(e => ({ name: e.name || e.category, x: e.x, y: e.y, ...(e.o_id ? { o_id: e.o_id } : {}), ...(e.dknown !== undefined ? { dknown: e.dknown } : {}) })),
     inventory: state.inventory.map(i => ({ letter: i.letter, text: i.text })),
     playerRoomNo: state.terrain?.playerRoom?.roomNo ?? null,
     playerInCorridor: state.terrain?.playerTerrain === 'CORR',
@@ -920,10 +920,81 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
   // and items on the new level aren't "discoveries" in the diff sense
   // (they're unrelated to the old level's item list).
   if (!levelChanged) {
-    const prevItems = new Map(prev.items.map(i => [`${i.name}@${i.x},${i.y}`, i]));
-    const currItems = new Map(current.items.map(i => [`${i.name}@${i.x},${i.y}`, i]));
-    for (const [key, item] of currItems) {
-      if (!prevItems.has(key)) {
+    // Phase 1: Match items by o_id (ground truth identity). Items with
+    // matching o_id are the same physical object — if the name changed,
+    // it's an identification refinement (e.g. "tool" → "chest"), not a
+    // disappearance + discovery.
+    const prevById = new Map<number, typeof current.items[0]>();
+    const currById = new Map<number, typeof current.items[0]>();
+    const prevUnmatched: typeof current.items = [];
+    const currUnmatched: typeof current.items = [];
+
+    for (const item of prev.items) {
+      if (item.o_id) prevById.set(item.o_id, item);
+      else prevUnmatched.push(item);
+    }
+    for (const item of current.items) {
+      if (item.o_id) currById.set(item.o_id, item);
+      else currUnmatched.push(item);
+    }
+
+    // Emit identification lines for o_id-matched items whose name changed;
+    // move unmatched o_id items to the fallback lists.
+    for (const [oid, currItem] of currById) {
+      const prevItem = prevById.get(oid);
+      if (prevItem) {
+        if (prevItem.name !== currItem.name) {
+          lines.push(`Identified: the ${prevItem.name} is actually ${currItem.name} (${describeRelativePos(px, py, currItem.x, currItem.y)})`);
+        }
+        // Matched — remove from prev so it's not reported as "gone"
+        prevById.delete(oid);
+      } else {
+        currUnmatched.push(currItem);
+      }
+    }
+    // Any remaining prev o_id items weren't matched → treat as gone
+    for (const item of prevById.values()) {
+      prevUnmatched.push(item);
+    }
+
+    // Phase 2: Fallback name@position matching for items without o_id.
+    // Also handles glyph→floor-scan refinement: when a glyph-only item
+    // (o_id=0) at a position is replaced by a floor-scan item with a
+    // different name at the same position, treat it as identification
+    // rather than a swap — the old item had no identity to match against.
+    const prevByKey = new Map(prevUnmatched.map(i => [`${i.name}@${i.x},${i.y}`, i]));
+    const currByKey = new Map(currUnmatched.map(i => [`${i.name}@${i.x},${i.y}`, i]));
+
+    // Index unmatched items by position for cross-name matching
+    const prevByPos = new Map<string, typeof current.items[0]>();
+    for (const item of prevUnmatched) {
+      if (!item.o_id) prevByPos.set(`${item.x},${item.y}`, item);
+    }
+    const currByPos = new Map<string, typeof current.items[0]>();
+    for (const item of currUnmatched) {
+      currByPos.set(`${item.x},${item.y}`, item);
+    }
+    // Track items consumed by position-based identification
+    const identifiedPrevKeys = new Set<string>();
+    const identifiedCurrKeys = new Set<string>();
+
+    // Detect glyph→floor-scan refinements: prev item had o_id=0 (glyph-only)
+    // and curr item at same position has a different name (now identified).
+    for (const [pos, prevItem] of prevByPos) {
+      const currItem = currByPos.get(pos);
+      if (!currItem) continue;
+      const prevKey = `${prevItem.name}@${prevItem.x},${prevItem.y}`;
+      const currKey = `${currItem.name}@${currItem.x},${currItem.y}`;
+      if (prevKey === currKey) continue; // same name — handled by key matching
+      // Different name at same position, old had no o_id → identification
+      lines.push(`Identified: the ${prevItem.name} is actually ${currItem.name} (${describeRelativePos(px, py, currItem.x, currItem.y)})`);
+      identifiedPrevKeys.add(prevKey);
+      identifiedCurrKeys.add(currKey);
+    }
+
+    for (const [key, item] of currByKey) {
+      if (identifiedCurrKeys.has(key)) continue;
+      if (!prevByKey.has(key)) {
         const firstTime = readOnly
           ? !reg.hasSeenItem(item.name, item.x, item.y, current.dlvl)
           : seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
@@ -938,8 +1009,9 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
         seenRegistry.seeItem(item.name, item.x, item.y, current.dlvl);
       }
     }
-    for (const [key, item] of prevItems) {
-      if (!currItems.has(key)) {
+    for (const [key, item] of prevByKey) {
+      if (identifiedPrevKeys.has(key)) continue;
+      if (!currByKey.has(key)) {
         lines.push(`The ${item.name} is no longer on the floor nearby`);
       }
     }

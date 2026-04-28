@@ -740,16 +740,25 @@ export class NethackConnection {
     // so consumers can decide whether to show them.
     const visibleItems = this.game.visibleItems || [];
     for (const item of visibleItems) {
-      const name = item.tileLabel || item.tileType;
+      const a = item as any;
+      const tileLabel = item.tileLabel || item.tileType;
+      // Prefer the C engine name (from distant_name/doname) — this is
+      // farlook-level detail, freely available to the player at zero cost.
+      // Falls back to tileLabel for statues/corpses, then undefined (which
+      // causes narration to use the glyph category as a last resort).
+      const itemName = a.name
+        || (item.tileLabel ? item.tileLabel : undefined);
       entities.push({
         type: "item",
         x: item.x,
         y: item.y,
-        category: (item.tileType === "statue" || item.tileType === "corpse") ? name : item.category,
+        category: (item.tileType === "statue" || item.tileType === "corpse") ? tileLabel : item.category,
         char: item.ch,
         color: item.color,
-        ...(item.tileLabel ? { name: item.tileLabel } : {}),
+        ...(itemName ? { name: itemName } : {}),
         ...(item.obscured ? { obscured: true } : {}),
+        ...(a.o_id ? { o_id: a.o_id as number } : {}),
+        ...(a.dknown !== undefined ? { dknown: !!a.dknown } : {}),
       });
     }
 
