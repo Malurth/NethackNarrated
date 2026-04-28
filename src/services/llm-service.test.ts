@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { hasNarratableContent, filterMessages, describeAction, computeDiff, captureSnapshot, narrate, analyze, resetNarrationState, maybeNarrate, buildMiniMap, saveNarrationStateForSlot, loadNarrationStateForSlot, clearNarrationStateForSlot, formatNarrationHistoryEntry, formatNarrationHistory, buildCurrentStateBlock, buildThisTurnBlock, buildSystemInstructions, NARRATION_HISTORY_LIMIT, getNarrationQueueState, resetNarrationQueue, friendlyConditionName, friendlyConditionList, friendlyPropertyName, friendlyPropertyList, SeenRegistry, seenRegistry, condenseDiffToEvents, captureNarrationHeader, synthesizeInitialEvents } from './llm-service';
+import { hasNarratableContent, filterMessages, describeAction, computeDiff, captureSnapshot, narrate, analyze, resetNarrationState, maybeNarrate, buildMiniMap, saveNarrationStateForSlot, loadNarrationStateForSlot, clearNarrationStateForSlot, formatNarrationHistoryEntry, formatNarrationHistory, buildCurrentStateBlock, buildThisTurnBlock, buildSystemInstructions, NARRATION_HISTORY_LIMIT, getNarrationQueueState, resetNarrationQueue, friendlyConditionName, friendlyConditionList, friendlyPropertyName, friendlyPropertyList, SeenRegistry, seenRegistry, condenseDiffToEvents, captureNarrationHeader, synthesizeInitialEvents, collapseTurnLog } from './llm-service';
 import { gameState } from '../state/game.svelte';
 import { llmState } from '../state/llm.svelte';
 import type { GameState, MonsterEntity } from '../types/game';
@@ -3103,5 +3103,55 @@ describe('synthesizeInitialEvents', () => {
     });
     synthesizeInitialEvents(state);
     expect(seenRegistry.hasSeenMonster(5, 'little dog')).toBe(true);
+  });
+});
+
+describe('collapseTurnLog', () => {
+  it('collapses intermediate prompt-response entries for multi-prompt actions', () => {
+    const log: import('../types/game').TurnRecord[] = [
+      { turn: 25, action: 'loot', diff: [], messages: [] },
+      { turn: 25, action: 'loot\n  → Prompted: "Do what with the chest?" → answered Look inside the chest', diff: [], messages: [] },
+      { turn: 25, action: 'loot\n  → Prompted: "Do what with the chest?" → answered Look inside the chest', diff: [], messages: [] },
+      { turn: 25, action: 'loot\n  → Prompted: "Do what with the chest?" → answered Look inside the chest\n  → Prompted: "Do what with the chest?" → answered take something out', diff: [], messages: [] },
+      { turn: 26, action: 'loot\n  → Prompted: "Do what with the chest?" → answered Look inside the chest\n  → Prompted: "Do what with the chest?" → answered take something out\n  → Prompted: "Take out what?" → answered a scroll labeled PRATYAVAYAH', diff: ['Turn advanced', 'Gained inventory o: a scroll labeled PRATYAVAYAH'], messages: ['o - a scroll labeled PRATYAVAYAH.'] },
+    ];
+    const collapsed = collapseTurnLog(log);
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0].turn).toBe(26);
+    expect(collapsed[0].diff).toHaveLength(2);
+    expect(collapsed[0].messages).toHaveLength(1);
+  });
+
+  it('preserves entries that have diffs or messages even if action is a prefix', () => {
+    const log: import('../types/game').TurnRecord[] = [
+      { turn: 10, action: 'move east', diff: ['Turn advanced', 'Moved east'], messages: [] },
+      { turn: 11, action: 'move east', diff: ['Turn advanced', 'Moved east'], messages: ['You see here a dagger.'] },
+    ];
+    const collapsed = collapseTurnLog(log);
+    expect(collapsed).toHaveLength(2);
+  });
+
+  it('handles interleaved real turns and prompt intermediates', () => {
+    const log: import('../types/game').TurnRecord[] = [
+      { turn: 24, action: 'move east', diff: ['Turn advanced'], messages: [] },
+      { turn: 25, action: 'loot', diff: [], messages: [] },
+      { turn: 25, action: 'loot\n  → Prompted: "Do what?" → answered take something out', diff: [], messages: [] },
+      { turn: 26, action: 'loot\n  → Prompted: "Do what?" → answered take something out\n  → Prompted: "Take out what?" → answered scroll', diff: ['Turn advanced'], messages: ['o - a scroll.'] },
+      { turn: 27, action: 'move north', diff: ['Turn advanced'], messages: [] },
+    ];
+    const collapsed = collapseTurnLog(log);
+    expect(collapsed).toHaveLength(3);
+    expect(collapsed.map(e => e.turn)).toEqual([24, 26, 27]);
+  });
+
+  it('returns single-entry logs unchanged', () => {
+    const log: import('../types/game').TurnRecord[] = [
+      { turn: 5, action: 'move east', diff: ['Turn advanced'], messages: [] },
+    ];
+    expect(collapseTurnLog(log)).toEqual(log);
+  });
+
+  it('returns empty logs unchanged', () => {
+    expect(collapseTurnLog([])).toEqual([]);
   });
 });

@@ -1224,12 +1224,44 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
   return lines;
 }
 
+/** Collapse intermediate prompt-response entries from the turn log.
+ *  During multi-prompt actions (e.g. looting a chest), each prompt
+ *  response triggers a state update that appends a turn record with
+ *  the cumulative action context but no diffs or messages. Only the
+ *  final resolution entry has actual content. We drop entries with
+ *  empty diffs AND empty messages whose action is a prefix of a later
+ *  entry's action — they're just intermediate prompt states. */
+export function collapseTurnLog(log: TurnRecord[]): TurnRecord[] {
+  if (log.length <= 1) return log;
+
+  // Work backwards: for each entry, check if it's an empty intermediate
+  // whose action context is a prefix of a later entry's action.
+  const kept: boolean[] = new Array(log.length).fill(true);
+  for (let i = 0; i < log.length; i++) {
+    const entry = log[i];
+    if (entry.diff.length > 0 || entry.messages.length > 0) continue;
+    // Empty entry — check if a later entry strictly subsumes its action
+    // context (longer string starting with the same prefix). Identical
+    // actions are different turns, not prompt intermediates.
+    for (let j = i + 1; j < log.length; j++) {
+      if (log[j].action.length > entry.action.length
+        && log[j].action.startsWith(entry.action)) {
+        kept[i] = false;
+        break;
+      }
+    }
+  }
+  return log.filter((_, i) => kept[i]);
+}
+
 function formatTurnLog(log: TurnRecord[]): string {
   if (log.length === 0) return '';
 
+  const collapsed = collapseTurnLog(log);
+
   // Single turn: same format as before
-  if (log.length === 1) {
-    const entry = log[0];
+  if (collapsed.length === 1) {
+    const entry = collapsed[0];
     const actionText = entry.action ? `\nPlayer action: ${entry.action}\n` : '';
     const diffText = entry.diff.length > 0
       ? `\nWhat changed this turn:\n${entry.diff.map(l => `- ${l}`).join('\n')}\n`
@@ -1238,8 +1270,8 @@ function formatTurnLog(log: TurnRecord[]): string {
   }
 
   // Multiple turns: step-by-step log
-  const lines: string[] = [`\nActions since last narration (${log.length} turns):`];
-  for (const entry of log) {
+  const lines: string[] = [`\nActions since last narration (${collapsed.length} turns):`];
+  for (const entry of collapsed) {
     const actionLine = entry.action || '(no action)';
     lines.push(`  Turn ${entry.turn}: ${actionLine}`);
     for (const d of entry.diff) {
