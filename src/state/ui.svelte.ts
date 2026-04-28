@@ -10,6 +10,11 @@ class UIStore {
   /** Camera auto-follows the player (dead-zone style). Set to false
    *  when the user manually pans the map. */
   cameraFollow = $state(true);
+  /** Item name detail mode:
+   *  - "immediate": show full item names from the C engine right away (auto-farlook)
+   *  - "explore": only show full names after the game has revealed them to the
+   *    player (nameKnown); unexamined items show their glyph category */
+  itemDetailMode = $state<"immediate" | "explore">("immediate");
 
   constructor() {
     // Restore persisted game settings
@@ -23,6 +28,9 @@ class UIStore {
         if (parsed.cameraFollow !== undefined) {
           this.cameraFollow = parsed.cameraFollow;
         }
+        if (parsed.itemDetailMode === "immediate" || parsed.itemDetailMode === "explore") {
+          this.itemDetailMode = parsed.itemDetailMode;
+        }
       }
     } catch { /* ignore */ }
   }
@@ -32,6 +40,7 @@ class UIStore {
       localStorage.setItem("nethack-ui-settings", JSON.stringify({
         autoResolvePickNone: this.autoResolvePickNone,
         cameraFollow: this.cameraFollow,
+        itemDetailMode: this.itemDetailMode,
       }));
     } catch { /* ignore */ }
   }

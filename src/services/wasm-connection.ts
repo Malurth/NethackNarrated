@@ -758,7 +758,7 @@ export class NethackConnection {
         ...(itemName ? { name: itemName } : {}),
         ...(item.obscured ? { obscured: true } : {}),
         ...(a.o_id ? { o_id: a.o_id as number } : {}),
-        ...(a.dknown !== undefined ? { dknown: !!a.dknown } : {}),
+        ...(a.nameKnown !== undefined ? { nameKnown: !!a.nameKnown } : {}),
       });
     }
 

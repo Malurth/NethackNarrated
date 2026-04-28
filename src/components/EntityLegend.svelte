@@ -2,7 +2,7 @@
   import { gameState } from '../state/game.svelte';
   import { uiState } from '../state/ui.svelte';
   import { NLE_COLORS } from '../utils/colors';
-  import type { ItemEntity } from '../types/game';
+  import { itemDisplayName, type ItemEntity } from '../types/game';
 
   interface LegendEntry {
     char: string;
@@ -25,7 +25,7 @@
       // Skip obscured items — the player hasn't actually seen them yet
       if (e.type === 'item' && (e as ItemEntity).obscured) continue;
 
-      const name = e.type === 'monster' ? e.name : ((e as any).name || (e as any).category || 'item');
+      const name = e.type === 'monster' ? e.name : itemDisplayName(e as ItemEntity, uiState.itemDetailMode);
       const remembered = e.type === 'item' && !!(e as ItemEntity).remembered;
       const key = `${e.char}-${name}`;
       const mapKey = `${key}${remembered ? '-rem' : ''}`;

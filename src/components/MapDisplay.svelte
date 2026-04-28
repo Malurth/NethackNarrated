@@ -3,7 +3,7 @@
   import { uiState } from '../state/ui.svelte';
   import { connection } from '../services/wasm-connection';
   import { NLE_COLORS, getStructuralColor } from '../utils/colors';
-  import type { ItemEntity } from '../types/game';
+  import { itemDisplayName, type ItemEntity } from '../types/game';
   import {
     applyWheelZoom,
     reconcileViewport,
@@ -34,7 +34,7 @@
     for (const e of gameState.entities) {
       const key = `${e.x},${e.y}`;
       if (map.has(key)) continue;
-      const name = e.type === 'monster' ? e.name : ((e as any).name || (e as any).category || 'item');
+      const name = e.type === 'monster' ? e.name : itemDisplayName(e as ItemEntity, uiState.itemDetailMode);
       map.set(key, name);
     }
     return map;
@@ -48,7 +48,7 @@
     const positions = new Set<string>();
     for (const e of gameState.entities) {
       if (e.type === 'item' && (e as ItemEntity).obscured) continue;
-      const name = e.type === 'monster' ? e.name : ((e as any).name || (e as any).category || 'item');
+      const name = e.type === 'monster' ? e.name : itemDisplayName(e as ItemEntity, uiState.itemDetailMode);
       if (`${e.char}-${name}` === key) {
         positions.add(`${e.x},${e.y}`);
       }

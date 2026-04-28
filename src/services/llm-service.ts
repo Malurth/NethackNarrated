@@ -1,7 +1,8 @@
-import type { GameState, MonsterEntity, ItemEntity, TurnRecord } from '../types/game';
+import { itemDisplayName, type GameState, type MonsterEntity, type ItemEntity, type TurnRecord } from '../types/game';
 import type { LLMEntry, NarrationHeader } from '../types/llm';
 import { gameState } from '../state/game.svelte';
 import { llmState } from '../state/llm.svelte';
+import { uiState } from '../state/ui.svelte';
 import { shouldTriggerNarration } from './narration-heuristic';
 import type { TriggerSnapshot } from './narration-heuristic';
 import { formatTerrainForPrompt } from '../utils/terrain-formatter';
@@ -183,7 +184,7 @@ interface NarrationSnapshot {
   warnedMonsters: string[];
   monsters: { name: string; x: number; y: number; m_id?: number }[];
   pets: { name: string; x: number; y: number; m_id?: number }[];
-  items: { name: string; x: number; y: number; o_id?: number; dknown?: boolean }[];
+  items: { name: string; x: number; y: number; o_id?: number; nameKnown?: boolean }[];
   inventory: { letter: string; text: string }[];
   playerRoomNo: number | null;
   playerInCorridor: boolean;
@@ -474,7 +475,7 @@ export function buildMiniMap(state: GameState): string {
     labels.set(key, e.char);
     const name = e.type === 'monster'
       ? `${e.name}${(e as MonsterEntity).pet ? ' (pet)' : ''}`
-      : (e as ItemEntity).name || (e as ItemEntity).category;
+      : itemDisplayName(e as ItemEntity, uiState.itemDetailMode);
     legend.push(`${e.char}=${name} at (${e.x},${e.y})`);
   }
 
@@ -548,7 +549,7 @@ function visibleNarrationItems(state: GameState): ItemEntity[] {
     if (e.type !== 'item') return false;
     // Skip obscured items — the player hasn't confirmed seeing them
     if (e.obscured) return false;
-    const name = e.name || e.category;
+    const name = itemDisplayName(e, uiState.itemDetailMode);
     return !featureKeys.has(`${name}@${e.x},${e.y}`);
   });
 }
@@ -632,7 +633,7 @@ export function captureSnapshot(state: GameState): NarrationSnapshot {
     warnedMonsters: [...state.warnedMonsters],
     monsters: visibleMonsters(state).map(e => ({ name: e.name, x: e.x, y: e.y, ...(e.m_id ? { m_id: e.m_id } : {}) })),
     pets: visiblePets(state).map(e => ({ name: e.name, x: e.x, y: e.y, ...(e.m_id ? { m_id: e.m_id } : {}) })),
-    items: visibleNarrationItems(state).map(e => ({ name: e.name || e.category, x: e.x, y: e.y, ...(e.o_id ? { o_id: e.o_id } : {}), ...(e.dknown !== undefined ? { dknown: e.dknown } : {}) })),
+    items: visibleNarrationItems(state).map(e => ({ name: itemDisplayName(e, uiState.itemDetailMode), x: e.x, y: e.y, ...(e.o_id ? { o_id: e.o_id } : {}), ...(e.nameKnown !== undefined ? { nameKnown: e.nameKnown } : {}) })),
     inventory: state.inventory.map(i => ({ letter: i.letter, text: i.text })),
     playerRoomNo: state.terrain?.playerRoom?.roomNo ?? null,
     playerInCorridor: state.terrain?.playerTerrain === 'CORR',
@@ -1372,7 +1373,7 @@ export function buildCurrentStateBlock(state: GameState): string {
   const itemsList = visibleNarrationItems(state);
   const itemsBlock = itemsList.length > 0
     ? `Items on the floor nearby:\n${itemsList.map(e => {
-        const label = e.name || e.category;
+        const label = itemDisplayName(e, uiState.itemDetailMode);
         const pos = describeRelativePos(p.x, p.y, e.x, e.y);
         return e.remembered
           ? `  - ${label} (${pos}, remembered — not currently visible)`
@@ -1445,7 +1446,9 @@ function buildAnalysisPrompt(state: GameState): string {
   const entityText = state.entities
     .map(e => {
       if (e.type === 'monster') return `  ${e.name}${e.pet ? ' (pet)' : ''} at (${e.x},${e.y})`;
-      return `  ${(e as any).category}${(e as any).name ? ': ' + (e as any).name : ''} at (${e.x},${e.y})`;
+      const ie = e as ItemEntity;
+      const displayName = itemDisplayName(ie, uiState.itemDetailMode);
+      return `  ${displayName} at (${e.x},${e.y})`;
     })
     .join('\n');
 

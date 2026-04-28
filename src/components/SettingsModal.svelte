@@ -191,6 +191,12 @@
             Auto-dismiss info menus
             <span class="toggle-hint">Convert display-only menus (e.g. far-look help) into non-blocking messages. Takes effect on next game start.</span>
           </label>
+
+          <label class="toggle-row">
+            <input type="checkbox" checked={uiState.itemDetailMode === 'explore'} onchange={(e) => uiState.itemDetailMode = (e.target as HTMLInputElement).checked ? 'explore' : 'immediate'} />
+            Explore item detail
+            <span class="toggle-hint">Show only glyph categories for unexamined floor items (e.g. "tool") until you step on them or farlook them.</span>
+          </label>
         </section>
       </div>
 

@@ -52,12 +52,22 @@ export interface ItemEntity {
    *  name changes (e.g. "a weapon" → "11 arrows"). 0 or undefined for
    *  remembered items and glyph-only entries. */
   o_id?: number;
-  /** True if the player has examined this item up close (at their feet or
-   *  in inventory). */
-  dknown?: boolean;
+  /** True if the game has revealed this item's specific name to the player
+   *  (stepped on it, picked it up, nearby farlook, etc.). When false, the
+   *  name may be generic. Driven by NetHack's internal dknown flag. */
+  nameKnown?: boolean;
 }
 
 export type Entity = MonsterEntity | ItemEntity;
+
+/** Get the display name for an item, respecting the item detail mode.
+ *  In "explore" mode, unexamined items show their glyph category. */
+export function itemDisplayName(item: ItemEntity, mode: "immediate" | "explore"): string {
+  if (mode === "explore" && !item.nameKnown) {
+    return item.category || "item";
+  }
+  return item.name || item.category || "item";
+}
 
 export interface InventoryItem {
   letter: string;

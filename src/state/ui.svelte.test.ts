@@ -9,6 +9,7 @@ beforeEach(() => {
   uiState.keyboardEnabled = true;
   uiState.autoResolvePickNone = true;
   uiState.cameraFollow = true;
+  uiState.itemDetailMode = 'immediate';
 });
 
 describe('UIStore defaults', () => {
@@ -27,6 +28,10 @@ describe('UIStore defaults', () => {
   it('starts with autoResolvePickNone enabled', () => {
     expect(uiState.autoResolvePickNone).toBe(true);
   });
+
+  it('starts with itemDetailMode set to immediate', () => {
+    expect(uiState.itemDetailMode).toBe('immediate');
+  });
 });
 
 describe('UIStore.saveSettings', () => {
@@ -36,6 +41,14 @@ describe('UIStore.saveSettings', () => {
 
     const saved = JSON.parse(localStorage.getItem('nethack-ui-settings')!);
     expect(saved.autoResolvePickNone).toBe(false);
+  });
+
+  it('persists itemDetailMode to localStorage', () => {
+    uiState.itemDetailMode = 'explore';
+    uiState.saveSettings();
+
+    const saved = JSON.parse(localStorage.getItem('nethack-ui-settings')!);
+    expect(saved.itemDetailMode).toBe('explore');
   });
 
   it('round-trips through localStorage', () => {
@@ -81,6 +94,6 @@ describe('UIStore localStorage restore', () => {
     uiState.cameraFollow = false;
     uiState.saveSettings();
     const saved = JSON.parse(localStorage.getItem('nethack-ui-settings')!);
-    expect(saved).toEqual({ autoResolvePickNone: false, cameraFollow: false });
+    expect(saved).toEqual({ autoResolvePickNone: false, cameraFollow: false, itemDetailMode: 'immediate' });
   });
 });

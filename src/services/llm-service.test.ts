@@ -3,6 +3,8 @@ import { hasNarratableContent, filterMessages, describeAction, computeDiff, capt
 import { gameState } from '../state/game.svelte';
 import { llmState } from '../state/llm.svelte';
 import type { GameState, MonsterEntity } from '../types/game';
+import { itemDisplayName } from '../types/game';
+import { uiState } from '../state/ui.svelte';
 import type { LLMEntry } from '../types/llm';
 
 function makeState(overrides: Partial<GameState> = {}): GameState {
@@ -766,6 +768,73 @@ describe('computeDiff — item and feature discovery', () => {
     const diff = computeDiff(prev, next);
     // Same name@position, no o_id — should not report anything about gold
     expect(diff.join('\n')).not.toContain('gold');
+  });
+});
+
+describe('itemDisplayName and explore mode', () => {
+  afterEach(() => {
+    uiState.itemDetailMode = 'immediate';
+  });
+
+  it('immediate mode always shows the real name', () => {
+    uiState.itemDetailMode = 'immediate';
+    expect(itemDisplayName({ type: 'item', x: 0, y: 0, category: 'tool', char: '(', color: 0, name: 'a large box', nameKnown: false }, 'immediate')).toBe('a large box');
+  });
+
+  it('explore mode shows category when nameKnown is false', () => {
+    expect(itemDisplayName({ type: 'item', x: 0, y: 0, category: 'tool', char: '(', color: 0, name: 'a large box', nameKnown: false }, 'explore')).toBe('tool');
+  });
+
+  it('explore mode shows real name when nameKnown is true', () => {
+    expect(itemDisplayName({ type: 'item', x: 0, y: 0, category: 'tool', char: '(', color: 0, name: 'a large box', nameKnown: true }, 'explore')).toBe('a large box');
+  });
+
+  it('explore mode falls back to category when name is undefined', () => {
+    expect(itemDisplayName({ type: 'item', x: 0, y: 0, category: 'weapon', char: ')', color: 0 }, 'explore')).toBe('weapon');
+  });
+
+  it('explore mode snapshot uses category for unexamined items', () => {
+    uiState.itemDetailMode = 'explore';
+    const snap = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47, nameKnown: false },
+      ],
+    }));
+    expect(snap.items[0].name).toBe('tool');
+  });
+
+  it('explore mode snapshot uses name for examined items', () => {
+    uiState.itemDetailMode = 'explore';
+    const snap = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47, nameKnown: true },
+      ],
+    }));
+    expect(snap.items[0].name).toBe('a large box');
+  });
+
+  it('explore mode diff emits Identified when nameKnown flips', () => {
+    uiState.itemDetailMode = 'explore';
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47, nameKnown: false },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a large box', category: 'tool', x: 15, y: 10, char: '(', color: 0, o_id: 47, nameKnown: true },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('Identified: the tool is actually a large box (5 tiles east)');
   });
 });
 
