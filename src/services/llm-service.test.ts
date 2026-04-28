@@ -771,6 +771,112 @@ describe('computeDiff — item and feature discovery', () => {
   });
 });
 
+describe('computeDiff — obscured items', () => {
+  it('reports "underfoot" when player steps on an item (o_id match)', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'an axe', category: 'weapon', x: 15, y: 10, char: ')', color: 0, o_id: 47 },
+      ],
+    }));
+    // Player moved to (15,10) — the item is now obscured under the player
+    const next = makeState({
+      turn: 2,
+      player: { x: 15, y: 10, hp: 16, max_hp: 16, pw: 4, max_pw: 4, ac: 10, str: 16, dex: 12, con: 16, int: 8, wis: 8, cha: 8, xp: 0, xp_level: 1, gold: 0, hunger: 'normal', score: 0, turn: 2, dlvl: 1 },
+      terrain: makeTerrain(),
+      entities: [
+        // Item is still here but obscured (player on top)
+        { type: 'item', name: 'an axe', category: 'weapon', x: 15, y: 10, char: ')', color: 0, o_id: 47, obscured: true },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('The an axe is now underfoot');
+    expect(diff.join('\n')).not.toContain('no longer on the floor');
+  });
+
+  it('reports "hidden beneath monster" when a monster stands on an item', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a dagger', category: 'weapon', x: 20, y: 10, char: ')', color: 0, o_id: 55 },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'monster', name: 'goblin', x: 20, y: 10, char: 'o', color: 0, pet: false },
+        { type: 'item', name: 'a dagger', category: 'weapon', x: 20, y: 10, char: ')', color: 0, o_id: 55, obscured: true },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('The a dagger is hidden beneath goblin (10 tiles east)');
+    expect(diff.join('\n')).not.toContain('no longer on the floor');
+  });
+
+  it('reports "no longer on the floor" only when item is truly gone', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'an axe', category: 'weapon', x: 15, y: 10, char: ')', color: 0, o_id: 47 },
+      ],
+    }));
+    // Item picked up — not in entities at all
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('The an axe is no longer on the floor nearby');
+  });
+
+  it('reports "underfoot" for items without o_id using position match', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', category: 'gold', x: 15, y: 10, char: '$', color: 0, name: 'gold' },
+      ],
+    }));
+    const next = makeState({
+      turn: 2,
+      player: { x: 15, y: 10, hp: 16, max_hp: 16, pw: 4, max_pw: 4, ac: 10, str: 16, dex: 12, con: 16, int: 8, wis: 8, cha: 8, xp: 0, xp_level: 1, gold: 0, hunger: 'normal', score: 0, turn: 2, dlvl: 1 },
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', category: 'gold', x: 15, y: 10, char: '$', color: 0, name: 'gold', obscured: true },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('The gold is now underfoot');
+    expect(diff.join('\n')).not.toContain('no longer on the floor');
+  });
+
+  it('reports generic "obscured" when cause is unclear', () => {
+    const prev = captureSnapshot(makeState({
+      turn: 1,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a gem', category: 'gem', x: 20, y: 10, char: '*', color: 0, o_id: 60 },
+      ],
+    }));
+    // Obscured but no monster and not at player position — item pile
+    const next = makeState({
+      turn: 2,
+      terrain: makeTerrain(),
+      entities: [
+        { type: 'item', name: 'a gem', category: 'gem', x: 20, y: 10, char: '*', color: 0, o_id: 60, obscured: true },
+      ],
+    });
+    const diff = computeDiff(prev, next);
+    expect(diff).toContain('The a gem is obscured (10 tiles east)');
+    expect(diff.join('\n')).not.toContain('no longer on the floor');
+  });
+});
+
 describe('itemDisplayName and explore mode', () => {
   afterEach(() => {
     uiState.itemDetailMode = 'immediate';

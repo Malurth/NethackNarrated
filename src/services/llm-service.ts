@@ -760,6 +760,40 @@ function diffPetsAcrossLevelChange(
   }
 }
 
+/**
+ * Check if a previously-visible item is now obscured (not gone) in the full
+ * entity list. Returns a descriptive line if obscured, or null if truly gone.
+ */
+function describeObscuredItem(
+  item: { name: string; x: number; y: number; o_id?: number },
+  state: GameState,
+  px: number,
+  py: number,
+): string | null {
+  // Look for this item as an obscured entity in the full list
+  const allItems = state.entities.filter(
+    (e): e is ItemEntity => e.type === 'item' && !!(e as ItemEntity).obscured
+  );
+  const match = item.o_id
+    ? allItems.find(e => e.o_id === item.o_id)
+    : allItems.find(e => e.x === item.x && e.y === item.y && (e.name || e.category) === item.name);
+  if (!match) return null;
+
+  // It's obscured — figure out what's on top
+  if (match.x === px && match.y === py) {
+    return `The ${item.name} is now underfoot`;
+  }
+  // Check for a monster on top
+  const monsterOnTop = state.entities.find(
+    e => e.type === 'monster' && e.x === match.x && e.y === match.y
+  );
+  if (monsterOnTop) {
+    return `The ${item.name} is hidden beneath ${monsterOnTop.name} (${describeRelativePos(px, py, match.x, match.y)})`;
+  }
+  // Generic obscured (item pile or unknown)
+  return `The ${item.name} is obscured (${describeRelativePos(px, py, match.x, match.y)})`;
+}
+
 export function computeDiff(prev: NarrationSnapshot, state: GameState, { registryOverride }: { registryOverride?: SeenRegistry } = {}): string[] {
   // When a registryOverride is provided, use it for first-time checks
   // without mutating the live seenRegistry. This is used by the aggregated
@@ -953,9 +987,16 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
         currUnmatched.push(currItem);
       }
     }
-    // Any remaining prev o_id items weren't matched → treat as gone
+    // Any remaining prev o_id items weren't matched in curr visible items.
+    // Before treating them as "gone," check if they're obscured in the full
+    // entity list (e.g. player or monster standing on top).
     for (const item of prevById.values()) {
-      prevUnmatched.push(item);
+      const obscuredLine = describeObscuredItem(item, state, px, py);
+      if (obscuredLine) {
+        lines.push(obscuredLine);
+      } else {
+        prevUnmatched.push(item);
+      }
     }
 
     // Phase 2: Fallback name@position matching for items without o_id.
@@ -1013,7 +1054,8 @@ export function computeDiff(prev: NarrationSnapshot, state: GameState, { registr
     for (const [key, item] of prevByKey) {
       if (identifiedPrevKeys.has(key)) continue;
       if (!currByKey.has(key)) {
-        lines.push(`The ${item.name} is no longer on the floor nearby`);
+        const obscuredLine = describeObscuredItem(item, state, px, py);
+        lines.push(obscuredLine ?? `The ${item.name} is no longer on the floor nearby`);
       }
     }
   }
